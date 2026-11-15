@@ -17,8 +17,8 @@ import sys
 import threading
 import time
 
-from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import (QAction, QColor, QFont, QIcon, QPainter, QPainterPath, QPalette,
+from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import (QAction, QColor, QDesktopServices, QFont, QIcon, QPainter, QPainterPath, QPalette,
                            QPen, QPixmap)
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QButtonGroup, QCheckBox,
                                QComboBox, QDoubleSpinBox, QFormLayout, QFrame, QGridLayout, QGroupBox,
@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QButtonGroup, QC
                                QPushButton, QRadioButton, QScrollArea, QSizePolicy, QSlider, QSplitter,
                                QStackedWidget, QSystemTrayIcon,
                                QTabWidget, QToolButton, QVBoxLayout, QWidget, QSpinBox,
-                               QInputDialog, QTreeWidget, QTreeWidgetItem)
+                               QInputDialog, QTreeWidget, QTreeWidgetItem, QDialog)
 
 from . import SOCKET_PATH, __version__, presets
 from .client import Client, DaemonError
@@ -138,6 +138,7 @@ class CurveEditor(QWidget):
         self.points: list[list[float]] = []
         self.t_range = (20.0, 100.0)
         self.d_min = 0.0
+        self.d_floor = 0.0          # hard floor: points can't go below it (a card's firmware minimum)
         self.max_points = 8
         self.drag = None
         self.hover = None
@@ -149,8 +150,12 @@ class CurveEditor(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setToolTip("Drag points to shape the curve.\nDouble-click to add a point, right-click a point to remove it.")
 
-    def set_points(self, pts, t_range=(20.0, 100.0), d_min=0.0, max_points=8):
-        self.points = sorted([list(map(float, p)) for p in pts])
+    def set_points(self, pts, t_range=(20.0, 100.0), d_min=0.0, max_points=8, hard_floor=None):
+        """hard_floor: the lowest speed the hardware accepts (graphics card firmware). Points below it are
+        raised to it, so the graph shows what the card really runs; None keeps the current floor."""
+        if hard_floor is not None:
+            self.d_floor = float(hard_floor)
+        self.points = sorted([[float(t), max(float(d), self.d_floor)] for t, d in pts])
         self.t_range, self.d_min, self.max_points = t_range, d_min, max_points
         self.update()
 
@@ -281,7 +286,7 @@ class CurveEditor(QWidget):
         pts = sorted(self.points)
         if any(abs(t - pt[0]) < 2 for pt in pts):
             return
-        d = round(interpolate(pts, t)) if pts else 50
+        d = max(round(interpolate(pts, t)) if pts else 50, self.d_floor)
         self.points = sorted(pts + [[float(t), float(d)]])
         self.changed.emit()
         self.update()
@@ -300,7 +305,7 @@ class CurveEditor(QWidget):
         pts = self.points
         lo_t = pts[i - 1][0] + 1 if i > 0 else self.t_range[0]
         hi_t = pts[i + 1][0] - 1 if i < len(pts) - 1 else self.t_range[1]
-        lo_d = pts[i - 1][1] if i > 0 else 0
+        lo_d = max(pts[i - 1][1] if i > 0 else 0, self.d_floor)
         hi_d = pts[i + 1][1] if i < len(pts) - 1 else 100
         pts[i] = [float(round(max(lo_t, min(hi_t, t)))), float(round(max(lo_d, min(hi_d, d))))]
         self.changed.emit()
@@ -698,8 +703,12 @@ class FanEditor(QWidget):
         self.title.setFont(f)
         self.live = QLabel()
         self.live.setTextFormat(Qt.RichText)
+        self.bios_hint = QLabel()               # what the BIOS does with this header (Nuvoton chips)
+        self.bios_hint.setWordWrap(True)
+        self.bios_hint.setEnabled(False)        # greyed: a hint, not a setting
         lay.addWidget(self.title)
         lay.addWidget(self.live)
+        lay.addWidget(self.bios_hint)
 
         mode_box = QGroupBox("How should this fan be controlled?")
         ml = QHBoxLayout(mode_box)             # one row: three stacked radio buttons cost ~80 px of height
@@ -913,13 +922,13 @@ class FanEditor(QWidget):
         self.cpu_fan = cpu_fan
         if is_gpu:
             t_lo, t_hi = getattr(self, "gpu_temp_range", (25, 100))
-            self.curve.set_points(s["curve"], (float(t_lo), float(t_hi)), float(getattr(self, "gpu_duty", (20, 100))[0]),
-                                  getattr(self, "gpu_points", 5))
+            g_lo = float(getattr(self, "gpu_duty", (20, 100))[0])
+            self.curve.set_points(s["curve"], (float(t_lo), float(t_hi)), g_lo, getattr(self, "gpu_points", 5), g_lo)
             self.curve_note.setText("Uses the GPU hotspot temperature. The curve is stored in the card's "
                                     "firmware (5 points); when FanPilot stops, the card goes back to its own control.")
             self.zero_rpm.setChecked(bool(s["zero_rpm"]))
         else:
-            self.curve.set_points(s["curve"], (20.0, 100.0), float(s["min_duty"]), 8)
+            self.curve.set_points(s["curve"], (20.0, 100.0), float(s["min_duty"]), 8, 0.0)
             self.curve_note.setText("")
             self.allow_stop.setChecked(bool(s["allow_stop"]) and not cpu_fan)
             self._update_minimums()
@@ -950,7 +959,7 @@ class FanEditor(QWidget):
 
     def _update_minimums(self):
         if self.is_gpu:
-            lo = 20
+            lo = int(getattr(self, "gpu_duty", (20, 100))[0])   # this card's own minimum (RX 9070 XT: 30 %)
         elif getattr(self, "cpu_fan", False):
             lo = CPU_FAN_FLOOR
         else:
@@ -1039,6 +1048,10 @@ class FanEditor(QWidget):
     # -- live updates
     def update_live(self, fan: dict, calibration, writable: bool):
         self.writable = writable
+        hint = fan.get("bios_hint") or ""
+        if self.bios_hint.text() != hint:
+            self.bios_hint.setText(hint)
+        self.bios_hint.setVisible(bool(hint))
         self.apply_btn.setEnabled(self.is_dirty and writable)
         rpm = fan.get("rpm")
         duty = fan.get("duty")
@@ -1139,6 +1152,149 @@ class _Poller(QObject):
                 return
 
 
+class CpuFanFinder(QDialog):
+    """'Find my CPU fan': pulse each spinning motherboard fan in turn (Identify) and ask whether the fan on
+    the CPU cooler changed. A yes marks it as a CPU fan. Only the service moves fans; this only asks."""
+    PULSE = 6.0          # the service's Identify: 3 s slow, then 3 s full speed
+
+    def __init__(self, win):
+        super().__init__(win)
+        self.win = win
+        self.setWindowTitle("Find my CPU fan")
+        self.setMinimumWidth(460)
+        fans = win.status.get("fans", [])
+        # only fans that spin can be seen changing; empty headers would waste the user's time
+        spinning = [f for f in fans if f.get("kind") == "board" and (f.get("rpm") or 0) > 0]
+        # most likely first: fans the BIOS drives from the CPU temperature, chipset fans and pumps last
+        order = {"cpu": 0, None: 1, "chipset": 2, "pump": 3}
+        spinning.sort(key=lambda f: order.get(f.get("bios_guess"), 1))     # stable: header order within a group
+        self.candidates = [(f["id"], f["label"]) for f in spinning]
+        self.marked = set(win.config.get("cpu_fans", [])) & {f["id"] for f in fans}
+        self.i = -1
+        self.t0 = None
+        lay = QVBoxLayout(self)
+        intro = QLabel("Take the side panel off or get close to the PC. FanPilot makes one fan at a time "
+                       "<b>slow down, then run at full speed</b> (6 s; the BIOS takes it back right after). "
+                       "Watch, or listen to, <b>the fan on your CPU cooler</b>.")
+        intro.setWordWrap(True)
+        lay.addWidget(intro)
+        self.step = QLabel()
+        f = self.step.font()
+        f.setPointSizeF(f.pointSizeF() * 1.3)
+        f.setBold(True)
+        self.step.setFont(f)
+        lay.addWidget(self.step)
+        self.phase = QLabel()
+        self.phase.setWordWrap(True)
+        lay.addWidget(self.phase)
+        self.bar = QProgressBar()
+        self.bar.setRange(0, int(self.PULSE * 10))
+        self.bar.setTextVisible(False)
+        lay.addWidget(self.bar)
+        self.question = QLabel("Did the fan on your CPU cooler just slow down and speed up?")
+        self.question.setWordWrap(True)
+        lay.addWidget(self.question)
+        row = QHBoxLayout()
+        self.yes_btn = QPushButton("Yes, that's the CPU cooler")
+        self.no_btn = QPushButton("No, try the next fan")
+        self.again_btn = QPushButton("Show me again")
+        self.close_btn = QPushButton("Close")
+        for b in (self.yes_btn, self.no_btn, self.again_btn):
+            row.addWidget(b)
+        row.addStretch(1)
+        row.addWidget(self.close_btn)
+        lay.addLayout(row)
+        self.yes_btn.clicked.connect(self.answer_yes)
+        self.no_btn.clicked.connect(self.next_fan)
+        self.again_btn.clicked.connect(self.pulse)
+        self.close_btn.clicked.connect(self.reject)
+        self.timer = QTimer(self)
+        self.timer.setInterval(100)
+        self.timer.timeout.connect(self._tick)
+        if not self.candidates:
+            self._finish("No motherboard fan is spinning right now, so there is nothing to watch.")
+        else:
+            QTimer.singleShot(1500, self.next_fan)    # a moment to read the text first
+            self.step.setText("Get ready…")
+            self._buttons(False)
+
+    def _buttons(self, on, more=True):
+        for b in (self.yes_btn, self.no_btn, self.again_btn):
+            b.setEnabled(on and more)
+        self.question.setVisible(more)
+
+    def next_fan(self):
+        if not self.isVisible():
+            return                  # closed before the delayed start: pulse nothing
+        self.i += 1
+        if self.i >= len(self.candidates):
+            if self.marked:
+                self._finish("Done. " + self._marked_text())
+            else:
+                self._finish("None of these was the CPU cooler fan. It may be on a header without a speed "
+                             "reading, or on a pump/fan hub: every fan keeps the CPU fan's protection.")
+            return
+        self.pulse()
+
+    def pulse(self):
+        if not 0 <= self.i < len(self.candidates):
+            return
+        fid, label = self.candidates[self.i]
+        self.step.setText(f"{label}   ({self.i + 1} of {len(self.candidates)})")
+        try:
+            self.win.client.call("identify", fan=fid)
+        except DaemonError as e:
+            self.timer.stop()
+            self.phase.setText(f"Could not pulse {label}: {e}. Wait a moment, then press 'Show me again'.")
+            self._buttons(True)
+            return
+        self.t0 = time.monotonic()
+        self._buttons(False)
+        self.timer.start()
+        self._tick()
+
+    def _tick(self):
+        el = time.monotonic() - self.t0
+        self.bar.setValue(min(self.bar.maximum(), int(el * 10)))
+        if el < self.PULSE / 2:
+            self.phase.setText(f"Slowing down…  {self.PULSE / 2 - el:.0f} s")
+        elif el < self.PULSE:
+            self.phase.setText(f"Full speed…  {self.PULSE - el:.0f} s")
+        else:
+            self.timer.stop()
+            self.phase.setText("Back to the BIOS.")
+            self._buttons(True)
+
+    def answer_yes(self):
+        fid, label = self.candidates[self.i]
+        self.marked.add(fid)
+        try:
+            self.win.config = self.win.client.call("set_cpu_fans", fans=sorted(self.marked))["config"]
+        except DaemonError as e:
+            self.marked.discard(fid)
+            QMessageBox.warning(self, "Could not change", str(e))
+            return
+        self.win.refresh()
+        rest = len(self.candidates) - self.i - 1
+        self.phase.setText(f"<b>{label} is now marked as a CPU fan.</b> "
+                           + ("If your cooler has a second fan, try the next fan; otherwise close." if rest else ""))
+        if not rest:
+            self._finish("Done. " + self._marked_text())
+
+    def _marked_text(self):
+        names = dict(self.candidates)
+        return "CPU fan: " + ", ".join(names.get(f, f) for f in sorted(self.marked)) + \
+            ". It never stops and never runs below 20 %; the other fans can now be allowed to stop."
+
+    def _finish(self, text):
+        self.timer.stop()
+        self.step.setText("Finished")
+        self.phase.setText(text)
+        self.bar.setValue(self.bar.maximum())
+        self._buttons(False, more=False)
+        self.close_btn.setText("Close")
+
+
 class MainWindow(QMainWindow):
     @property
     def config(self) -> dict:
@@ -1165,7 +1321,8 @@ class MainWindow(QMainWindow):
         self.banner = QLabel()
         self.banner.setWordWrap(True)
         self.banner.setTextFormat(Qt.RichText)
-        self.banner.setOpenExternalLinks(True)
+        self.banner.setOpenExternalLinks(False)
+        self.banner.linkActivated.connect(self._banner_link)
         self.banner.setFrameShape(QFrame.StyledPanel)
         self.banner.setMargin(8)
         self.banner.setVisible(False)
@@ -1529,6 +1686,18 @@ class MainWindow(QMainWindow):
         self.banner.setAutoFillBackground(True)
         self.banner.setPalette(pal)
 
+    def _banner_link(self, href):
+        if href == "fanpilot:find-cpu":
+            self.find_cpu_fan()
+        else:
+            QDesktopServices.openUrl(QUrl(href))
+
+    def find_cpu_fan(self):
+        dlg = CpuFanFinder(self)
+        dlg.setAttribute(Qt.WA_DeleteOnClose)
+        dlg.show()
+        return dlg
+
     def _update_banner(self):
         st = self.status
         if st["critical"]:
@@ -1545,8 +1714,9 @@ class MainWindow(QMainWindow):
         elif not st.get("cpu_fan_known", True) and self.writable:
             self._banner("info", "<b>Which fan is your CPU fan?</b> FanPilot doesn't know this board yet, so every "
                                  "motherboard fan keeps the CPU fan's protection (never stops, at least 20 %). "
-                                 "Use <i>Identify</i> to find it, then right-click it in the list → "
-                                 "<i>This is a CPU fan</i>.")
+                                 "<a href=\"fanpilot:find-cpu\">Find my CPU fan…</a> pulses each fan in turn "
+                                 "while you watch the cooler (or use <i>Identify</i>, then right-click the fan → "
+                                 "<i>This is a CPU fan</i>).")
         elif not self.writable:
             self._banner("info", f"<b>View only.</b> Your user (uid {os.getuid()}) may not change settings. "
                                  "Add it to the <code>fanpilot</code> group "
@@ -1583,7 +1753,11 @@ class MainWindow(QMainWindow):
             mode = modes.get(f.get("mode"), "")
             flags = f.get("flags") or []
             warn = " ⚠" if any(x in flags for x in ("critical", "sensor_failed", "gave_up", "write_error", "error", "stalled")) else ""
-            self.fan_list.item(i).setText(f"{f['label']}\n{rpm if rpm is not None else '—'} RPM · {mode}{warn}")
+            # a guess from the BIOS's own setup, only while the fan still has its generic name
+            guess = {"pump": " · pump header?", "chipset": " · chipset fan?"}.get(f.get("bios_guess"), "") \
+                if re.fullmatch(r"Fan \d+", f["label"]) else ""
+            self.fan_list.item(i).setText(f"{f['label']}\n{rpm if rpm is not None else '—'} RPM · {mode}{guess}{warn}")
+            self.fan_list.item(i).setToolTip(f.get("bios_hint") or "")
         cur = self.editor.fan_id
         jobs = any((self.status.get(k) or {}).get("state") == "running" for k in ("selftest", "mapping"))
         for f in fans:
@@ -1649,6 +1823,7 @@ class MainWindow(QMainWindow):
             a.setCheckable(True)
             a.setChecked(fid in marks)
             a.toggled.connect(lambda on: self._mark_cpu_fan(fid, on))
+            m.addAction("Find my CPU fan…", self.find_cpu_fan)
         m.exec(self.fan_list.viewport().mapToGlobal(pos))
 
     def rename(self, item_id, current):

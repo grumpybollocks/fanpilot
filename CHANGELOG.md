@@ -13,6 +13,26 @@
   OverDrive fix includes rebuilding the initramfs, corrected claims (the GPU curve returns to the card's
   control when FanPilot stops), SECURITY.md; release notes come from this file.
 
+**Found on a second real machine** (ASUS TUF GAMING X570-PLUS, Nuvoton NCT6798, AMD RX 9070 XT); its report is
+now a test machine (`tests/reports/asus-tuf-gaming-x570-plus.json`).
+
+* **Sensors:** on boards not in the database, channels reading exactly 0 °C are treated as unconnected
+  (NCT6798 `PCH_CHIP_TEMP`, `PCH_CPU_TEMP`, `PCH_CHIP_CPU_MAX_TEMP` on AMD boards showed as live 0 °C sensors).
+* **Map my fans:** headers proven empty (no fan slows, every spinning fan belongs to another header) are now
+  recorded even while the CPU fan is unknown. They stay visible until you mark the CPU fan, then are hidden
+  at once; no second mapping run. Nothing is hidden while any header could still be the CPU fan.
+* **Find my CPU fan (new):** a guide (banner link, or right-click a fan) that pulses each spinning
+  motherboard fan in turn with a countdown and asks whether the fan on the CPU cooler changed; "Yes" marks it.
+  The app's "Identifying" label only says which header was *told* to pulse, not which fan is wired to it.
+* **What the BIOS does with each header (new, Nuvoton NCT67xx boards):** read from the chip, shown under the
+  fan's name and as its tooltip: the temperature it follows and its curve. From that, a cautious guess:
+  *pump header?* (full speed at every temperature), *chipset fan?* (X570, non-CPU sensor, stops when cool), or
+  "follows the CPU" (Find my CPU fan tries those first). A guess never makes a CPU fan or changes any
+  protection. ITE (it87) boards get no guess: their source bitmask differs between driver builds.
+* **Graphics card curve / fixed speed:** points can no longer be set below the card's own firmware minimum
+  (RX 9070 XT: 30 %), and saved points below it are shown at the speed the card really runs. The fixed-speed
+  minimum is the card's reported one instead of a fixed 20 %.
+
 ## 1.0.0 — first public release
 
 * **Motherboard fans** on any board with a supported Super I/O driver (it87, nct6775 family, nct6687,

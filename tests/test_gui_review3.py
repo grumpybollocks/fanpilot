@@ -198,6 +198,84 @@ class GuiReview3(Base):
         c.set_points([[80, 90], [40, 30]])
         self.assertEqual(c.points, [[40.0, 30.0], [80.0, 90.0]])
 
+    def test_gpu_curve_never_below_card_minimum(self):
+        """Real RX 9070 XT (2026-11-15): firmware accepts 30-100 %, but a point could be dragged to 6 % and the
+        graph kept showing 6 % while the card ran 30 %."""
+        from PySide6.QtCore import QPointF
+        from fanpilot.gui import CurveEditor, FanEditor
+        c = CurveEditor()
+        c.resize(400, 260)
+        c.set_points([[48, 6], [56, 42], [95, 100]], (25.0, 100.0), 30.0, 5, 30.0)
+        self.assertEqual(c.points[0], [48.0, 30.0], "loaded below the card's minimum: shown as what it runs")
+        c.drag = 0
+
+        class Ev:
+            def __init__(self, p):
+                self._p = p
+
+            def position(self):
+                return self._p
+        c.mouseMoveEvent(Ev(QPointF(c._to_px(48, 0).x(), c._plot().bottom())))   # drag to the floor
+        self.assertEqual(c.points[0][1], 30.0, "can't be dragged under the card's minimum")
+        # a motherboard curve keeps 0 % points (fan stop)
+        c.set_points([[30, 0], [80, 100]], (20.0, 100.0), 20.0, 8, 0.0)
+        self.assertEqual(c.points[0], [30.0, 0.0])
+        # fixed speed: the slider's minimum is the card's, not a guess
+        e = FanEditor()
+        e.gpu_duty = (30, 100)
+        e.load("amdgpu/fan1", {"mode": "fixed", "fixed": 20, "curve": [[48, 6], [95, 100]], "zero_rpm": False},
+               True, "Graphics card fan", force=True, header=False)
+        self.assertEqual(e.spin.minimum(), 30)
+        self.assertEqual(e.curve.points[0], [48.0, 30.0])
+
+
+    def test_find_my_cpu_fan_guide(self):
+        """Second real machine (2026-11-15): the user read 'Identifying' next to the fan the app was told to
+        pulse and took it as proof. The guide pulses each spinning fan and asks about the cooler instead."""
+        from fanpilot.hw import discover
+        hw = discover(self.m.root)
+        it = next(d for c, d in hw.chips.items() if hw.names[c].startswith("it8"))
+        for i, rpm in ((1, 900), (2, 1100), (3, 0)):                         # header 3: nothing to watch
+            with open(os.path.join(it, f"fan{i}_input"), "w") as f:
+                f.write(f"{rpm}\n")
+        self.start({"allowed_uids": [os.getuid()]})
+        w = self.w
+        w.refresh()
+        dlg = w.find_cpu_fan()
+        spinning = [f["id"] for f in w.status["fans"] if f.get("kind") == "board" and f.get("rpm")]
+        self.assertEqual([c[0] for c in dlg.candidates], spinning, "only fans that spin are shown")
+        self.assertEqual(len(spinning), 2)
+        self.pump(lambda: dlg.i == 0 and self.d.identify, timeout=5)        # starts by itself
+        self.assertIn(spinning[0], self.d.identify, "the service pulses the first fan")
+        self.assertFalse(dlg.yes_btn.isEnabled(), "no answer before the pulse has been seen")
+        dlg.t0 -= dlg.PULSE                                                  # the 6 s are over
+        dlg._tick()
+        self.assertTrue(dlg.yes_btn.isEnabled())
+        self.pump(lambda: not self.d.identify, timeout=10)                   # service finished that pulse
+        dlg.next_fan()                                                       # "No": the second fan
+        self.pump(lambda: spinning[1] in self.d.identify, timeout=5)
+        dlg.answer_yes()
+        self.assertEqual(self.d.cfg["cpu_fans"], [spinning[1]])
+        self.assertIn(spinning[1], dlg.marked)
+        dlg.reject()
+        # most likely first: fans the BIOS drives from the CPU temperature; chipset fans and pumps last
+        from fanpilot.gui import CpuFanFinder
+        w.status = dict(w.status, fans=[
+            {"id": "n/pwm1", "label": "Fan 1", "kind": "board", "rpm": 700},
+            {"id": "n/pwm5", "label": "Fan 5", "kind": "board", "rpm": 1500, "bios_guess": "chipset"},
+            {"id": "n/pwm2", "label": "Fan 2", "kind": "board", "rpm": 720, "bios_guess": "cpu"},
+            {"id": "n/pwm3", "label": "Fan 3", "kind": "board", "rpm": 800, "bios_guess": "cpu"}])
+        d2 = CpuFanFinder(w)
+        self.assertEqual([c[0] for c in d2.candidates], ["n/pwm2", "n/pwm3", "n/pwm1", "n/pwm5"])
+        d2.reject()
+        self.d.identify.clear()
+        self.pump(lambda: False, timeout=1.8)                                # its delayed start passes
+        self.assertEqual(d2.i, -1, "closed before it started: no fan tried, nothing pulsed")
+        # the banner links to it while the CPU fan is unknown
+        w.status["cpu_fan_known"] = False
+        w._update_banner()
+        self.assertIn("fanpilot:find-cpu", w.banner.text())
+
 
 if __name__ == "__main__":
     unittest.main()

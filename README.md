@@ -220,6 +220,12 @@ The self-test repeats the core checks on any PC.
 | In-app self-test | 0.3.0 | **14 / 14 passed** |
 | Sensors view | 0.4.0 | 39 readings, no false red values, every `pwm*_enable` unchanged |
 
+### Also verified on
+
+| Machine | Version | Result |
+|---|---|---|
+| ASUS TUF GAMING X570-PLUS (Nuvoton NCT6798, not in the board database), Ryzen 7 5700X3D, RX 9070 XT, kernel 7.2.9 | 1.0.0 | In-app self-test 7 / 7 passed; Map my fans: headers 1, 2, 3, 5 drive their own tachometers, 4, 6, 7 empty; every header back in its original BIOS mode afterwards (Smart Fan IV, header 7 full speed); GPU firmware curve applied (card range 30–100 %); found the three fixes listed under *Unreleased* in the changelog |
+
 `sudo scripts/selftest.sh` (about 90 s) is a fuller version with a real SIGKILL crash test; it runs on the
 reference board only and points to `fanpilotctl selftest` elsewhere.
 

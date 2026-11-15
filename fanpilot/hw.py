@@ -111,6 +111,58 @@ class Sensor:
         return v / 1000.0
 
 
+# Temperature inputs of the nct6775 family that carry the CPU's temperature (Intel PECI, AMD TSI / SB-TSI,
+# and the CPUTIN thermistor under the socket). SMBUSMASTER 0 is the CPU on boards that wire it; other
+# SMBUSMASTER numbers vary, so they are never counted.
+CPU_SOURCE_RE = re.compile(r"^(CPUTIN|PECI|TSI\d|AMD TSI|SMBUSMASTER 0\b)", re.I)
+
+
+def bios_setup(hdir: str, idx: int, board_name: str = "") -> dict | None:
+    """What the BIOS itself does with header idx, read from the chip (read only): the temperature it
+    follows and its curve, plus a guess at what kind of header it is. Only for the nct6775 family, whose
+    pwmN_temp_sel names one input; the it87 bitmask means different things in different driver builds, so
+    nothing is guessed there. Guesses never change protection: they are hints and an order for 'Find my
+    CPU fan'.
+
+    guess: "cpu"      follows the CPU temperature (the CPU fan, or a case fan set to follow the CPU)
+           "pump"     full speed at every temperature (the BIOS default for AIO_PUMP / W_PUMP headers)
+           "chipset"  an X570 board, a non-CPU sensor, and the fan stops when cool (the chipset fan)
+           None       nothing to go on"""
+    sel = _read_int(os.path.join(hdir, f"pwm{idx}_temp_sel"))
+    if not sel:
+        return None
+    source = (_read(os.path.join(hdir, f"temp{sel}_label")) or "").strip() or f"temp{sel}"
+    points = []
+    for k in range(1, 8):
+        t = _read_int(os.path.join(hdir, f"pwm{idx}_auto_point{k}_temp"))
+        p = _read_int(os.path.join(hdir, f"pwm{idx}_auto_point{k}_pwm"))
+        if t is None or p is None:
+            break
+        points.append((round(t / 1000), round(p * 100 / 255)))
+    cpu = bool(CPU_SOURCE_RE.match(source))
+    full = bool(points) and all(p == 100 for _, p in points)
+    stop_below = points[0][0] if points and points[0][1] == 0 else None
+    guess = ("pump" if full else "cpu" if cpu else
+             "chipset" if stop_below is not None and "X570" in (board_name or "").upper() else None)
+    if full:
+        hint = "The BIOS runs this header at full speed at every temperature, the usual setting for a pump header."
+    else:
+        hint = (f"The BIOS makes it follow the CPU temperature ({source})" if cpu else
+                f"The BIOS makes it follow {source}, not the CPU")
+        if points:
+            lo = next(((t, p) for t, p in points if p > 0), points[0])
+            hi = next(((t, p) for t, p in points if p == 100), points[-1])
+            hint += f": {lo[1]} % at {lo[0]} °C, {hi[1]} % at {hi[0]} °C"
+        if stop_below is not None:
+            hint += f", stopped below {stop_below} °C"
+        hint += "."
+        if guess == "chipset":
+            hint += " On X570 boards that is usually the chipset fan: leave it on Automatic."
+        elif cpu:
+            hint += " The CPU fan does this, but case fans often do too: 'Find my CPU fan' tells them apart."
+    return {"source": source, "points": points, "guess": guess, "hint": hint}
+
+
 @dataclass
 class BoardFan:
     """A motherboard PWM header (it87)."""
@@ -120,6 +172,7 @@ class BoardFan:
     enable_path: str
     rpm_path: str | None
     kind: str = "board"
+    bios: dict | None = None      # the BIOS's own Smart Fan setup for this header (bios_setup), read once
 
     def rpm(self) -> int | None:
         return _read_int(self.rpm_path) if self.rpm_path else None
@@ -294,8 +347,9 @@ def discover(root: str = "/") -> Hardware:
             else:
                 if board:
                     v = sen.read()
-                    if v is None or not 0 <= v <= 120:
-                        continue               # unknown board: -128 / 127 / -62 = nothing connected
+                    if v is None or not 0 < v <= 120:
+                        continue               # unknown board: -128 / 127 / -62 / exactly 0 = nothing connected
+                                               # (nct6798 PCH_* channels on AMD boards read 0.000 °C)
                 label = KNOWN_LABELS.get((base_name, raw_label))
                 if label is None and base_name in ("coretemp",) and raw_label.startswith("Core "):
                     label = f"CPU core {raw_label[5:]}"
@@ -336,7 +390,8 @@ def discover(root: str = "/") -> Hardware:
                     elif PUMP_LABEL_RE.search(fl):
                         hw.pump_fans.add(fid)
                 hw.fans[fid] = BoardFan(fid, label, os.path.join(hdir, f"pwm{idx}"),
-                                        os.path.join(hdir, f"pwm{idx}_enable"), rpm)
+                                        os.path.join(hdir, f"pwm{idx}_enable"), rpm,
+                                        bios=bios_setup(hdir, idx, hw.dmi.get("board_name", "")))
         else:
             # fans this program can only read (EC/WMI board sensors, laptops, ...)
             for fname in sorted(files, key=lambda f: (len(f), f)):

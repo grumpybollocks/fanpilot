@@ -591,6 +591,8 @@ class Daemon:
         st = {"id": fid, "label": fan.label, "kind": fan.kind, "control": "pwm", "mode": fc["mode"],
               "own_sensor": self.own_sensor(fid) if fan.kind == "gpu" else None,
               "rpm": fan.rpm(), "duty": None, "target": None, "temp": None, "flags": []}
+        if getattr(fan, "bios", None):
+            st["bios_hint"], st["bios_guess"] = fan.bios["hint"], fan.bios["guess"]
         if not os.path.exists(fan.enable_path):
             st["flags"].append("missing")
             self.fan_status[fid] = st
@@ -1333,7 +1335,9 @@ class Daemon:
                         return {"ok": False, "error": f"not a motherboard fan on this PC: {', '.join(bad)}"}
                     cfg = json.loads(json.dumps(self.cfg))
                     cfg["cpu_fans"] = fans
-                    return {"ok": True, "config": self.set_config(cfg, uid)}
+                    saved = self.set_config(cfg, uid)
+                    self.rescan()       # headers the map found empty may be hidden now that the CPU fan is known
+                    return {"ok": True, "config": saved}
                 if cmd == "rescan":
                     self.rescan()
                     return {"ok": True}
