@@ -48,7 +48,7 @@ def main(argv=None) -> int:
     s.add_argument("fan", help="fan id, e.g. it8688/pwm2 or amdgpu/fan1")
     s.add_argument("mode", choices=["auto", "fixed", "curve"])
     s.add_argument("value", nargs="?", help="percent for fixed, or curve as 40:30,60:45,80:100")
-    c = sub.add_parser("calibrate", help="measure a motherboard fan's stop/start speed")
+    c = sub.add_parser("calibrate", help="measure a motherboard fan's stop/start speed, or a graphics card fan's lowest speed")
     c.add_argument("fan", nargs="?")
     c.add_argument("--stop", action="store_true", help="stop a running measurement")
     sub.add_parser("events", help="show recent events")

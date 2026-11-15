@@ -8,9 +8,14 @@
 * **Voltages on boards not in the database:** the fixed-function pins of NCT6779 and later (CPU Vcore, AVSB,
   +3.3V, +3.3V standby, CMOS battery), which the driver scales itself, with the +-10 % / low-battery alert.
   Board-wired inputs (+12V, +5V, ...) still need the board database: raw values would mislead.
+* **Graphics card: measure its lowest speed (new, RX 7000/9000):** *Measure this fan…* on the card holds a
+  flat firmware curve at 100, 90, … down to the card's minimum (about 10 s each) and shows the slowest it
+  really runs (% and RPM), and below which setting the fan stops getting slower. Stops at 85 °C hotspot, on a
+  hot CPU or an emergency; the card's own setting comes back afterwards. Also `fanpilotctl calibrate amdgpu/fan1`.
 * **More drivers:** RAM module temperatures (`jc42`, `spd5118`) in the Memory group; `drivetemp` drives and
   Intel chipset (`pch_*`) sensors get plain names.
 
+## 1.0.1
 
 * **Emergency mode covers the graphics card too:** above a CPU or GPU emergency limit, an AMD RX 7000/9000
   card's fan now also runs at full speed (before, only motherboard fans did); it returns to its setting after.

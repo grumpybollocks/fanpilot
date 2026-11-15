@@ -36,6 +36,7 @@ RECLAIM_WINDOW = 60.0
 GPU_VERIFY_EVERY = 30.0
 RESCAN_EVERY = 10.0       # look again for hardware that is missing (late driver, module reload)
 CAL_ABORT_CPU = 80.0      # calibration aborts above this CPU temperature
+GPU_CAL_ABORT = 85.0      # graphics card measurement aborts at this hotspot temperature
 GPU_RETRY_AFTER = 60.0    # back-off after the GPU firmware rejected a curve
 GPU_MAX_FAILS = 3         # then give the GPU fan back to the card
 TICK_FAIL_LIMIT = 3       # consecutive broken ticks -> restore + exit so systemd restarts us
@@ -320,6 +321,79 @@ class Calibration:
                 "table": self.table, "result": self.result}
 
 
+class GpuCalibration:
+    """Finds the lowest speed an RX 7000/9000 card's fan really runs at: a flat firmware curve at 100, 90, ...
+    down to the card's own minimum (OD_RANGE), zero-RPM off, the RPM read after each step settles. Shares
+    the 'calibration' slot with Calibration, so the self-test, mapping and a second measurement are refused
+    while it runs. Stops early if the card or CPU gets hot; afterwards the card gets its setting back."""
+    SETTLE = 10              # the firmware ramps the fan over several seconds
+
+    def __init__(self, fan: GpuFan, apply_flat, gpu_temp):
+        self.fan = fan
+        self.state = "running"
+        self.message = "Full speed"
+        self.progress = 0.0
+        self.table: list[list[float]] = []
+        self.result: dict | None = None
+        self.next_at = 0.0
+        self.duty = 100.0
+        self._apply_flat = apply_flat         # duty -> writes the flat curve (records the restore entry)
+        self._gpu_temp = gpu_temp             # () -> °C or None
+        self._gen = self._steps()
+
+    def _steps(self):
+        info = amdgpu.read_info(self.fan.fan_ctrl_dir)
+        dmin, dmax = info.duty_range
+        duties = sorted({dmax, *range(dmax - dmax % 10, dmin, -10), dmin}, reverse=True)
+        for i, d in enumerate(duties):
+            self.duty = float(d)
+            self.message = f"Testing {d} %"
+            self.progress = 0.05 + 0.9 * i / len(duties)
+            self._apply_flat(d)
+            yield self.SETTLE
+            rpm = self.fan.rpm() or 0
+            if d == dmax and rpm <= 0:
+                self.abort("No speed reading at full speed: the card reports no fan speed")
+                return
+            self.table.append([d, rpm])
+        max_rpm, (low_duty, low_rpm) = self.table[0][1], self.table[-1]
+        # where lowering the setting stopped slowing the fan (firmware floor above the advertised minimum)
+        effective = low_duty
+        for (d_hi, r_hi), (d_lo, r_lo) in zip(self.table, self.table[1:]):
+            if r_hi > 0 and r_lo >= r_hi * 0.97:
+                effective = d_hi
+                break
+        self.result = {"kind": "gpu", "max_rpm": max_rpm, "min_duty": low_duty, "min_rpm": low_rpm,
+                       "effective_min_duty": effective, "table": self.table, "time": int(time.time())}
+        self.progress = 1.0
+        self.state = "done"
+        self.message = "Finished"
+
+    def tick(self, now: float) -> None:
+        if self.state != "running":
+            return
+        t = self._gpu_temp()                  # every tick, not only between steps
+        if t is not None and t >= GPU_CAL_ABORT:
+            self.abort(f"Stopped: graphics card at {t:.0f} °C")
+            return
+        if now < self.next_at:
+            return
+        try:
+            self.next_at = now + next(self._gen)
+        except StopIteration:
+            pass
+
+    def abort(self, why: str) -> None:
+        if self.state == "running":
+            self.state = "aborted"
+            self.message = why
+
+    def info(self) -> dict:
+        return {"fan": self.fan.id, "state": self.state, "message": self.message,
+                "progress": round(self.progress, 2), "duty": self.duty,
+                "table": self.table, "result": self.result}
+
+
 # --------------------------------------------------------------------------- daemon
 
 class Daemon:
@@ -532,6 +606,9 @@ class Daemon:
         for job, flag in ((self.selftest, "testing"), (self.mapping, "mapping")):
             if job and job.state == "running" and fid in job.busy:
                 return flag
+        cal = self.calibration
+        if isinstance(cal, GpuCalibration) and cal.state == "running" and cal.fan.id == fid:
+            return "calibrating"
         return None
 
     def _named_readings(self) -> list[dict]:
@@ -923,6 +1000,9 @@ class Daemon:
                     self.event("info", f"Calibration of {cal.fan.label} finished: {cal.result}")
             if cal.state != "running":
                 self.states[cal.fan.id].reset()
+                if isinstance(cal, GpuCalibration):
+                    self.gpu[cal.fan.id].applied = None      # the setting goes back on the card now
+                    self.control_gpu(now, cal.fan, force=True)
         st = self.selftest
         if st and st.state == "running":
             try:
@@ -1247,8 +1327,9 @@ class Daemon:
                 if cmd == "calibrate":
                     fid = req.get("fan")
                     fan = self.hw.fans.get(fid)
-                    if not isinstance(fan, BoardFan) or fan.kind != "board":
-                        return {"ok": False, "error": "only motherboard fans can be calibrated"}
+                    if not (isinstance(fan, GpuFan) or (isinstance(fan, BoardFan) and fan.kind == "board")):
+                        return {"ok": False, "error": "only motherboard fans and RX 7000/9000 graphics card "
+                                                      "fans can be measured"}
                     if self.calibration and self.calibration.state == "running":
                         return {"ok": False, "error": "a calibration is already running"}
                     if self.selftest and self.selftest.state == "running":
@@ -1257,6 +1338,18 @@ class Daemon:
                         return {"ok": False, "error": "fans are being mapped"}
                     if self.critical:
                         return {"ok": False, "error": "temperatures are critical"}
+                    if isinstance(fan, GpuFan):
+                        if fid in self.disabled:
+                            return {"ok": False, "error": "the card rejected FanPilot's curves earlier"}
+
+                        def flat(d, fan=fan):
+                            self._gpu_restore(fan.fan_ctrl_dir, True)      # recorded before the write
+                            info = amdgpu.read_info(fan.fan_ctrl_dir)
+                            amdgpu.apply(fan.fan_ctrl_dir, amdgpu.flat_points(info, d), False)
+                        self.calibration = GpuCalibration(
+                            fan, flat, lambda fid=fid: self.temps.get(self.own_sensor(fid) or ""))
+                        self.event("info", f"Measuring {fan.label}'s lowest speed")
+                        return {"ok": True}
                     self._take(fan)
                     fan.set_enable(1)
                     fan.set_pwm(255)       # not whatever stale value the BIOS left in the register

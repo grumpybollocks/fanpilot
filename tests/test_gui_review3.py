@@ -227,6 +227,14 @@ class GuiReview3(Base):
                True, "Graphics card fan", force=True, header=False)
         self.assertEqual(e.spin.minimum(), 30)
         self.assertEqual(e.curve.points[0], [48.0, 30.0])
+        # its lowest-speed measurement is offered and shown (no Identify, no 'use as lowest' for a card)
+        self.assertFalse(e.cal_box.isHidden())
+        self.assertTrue(e.id_btn.isHidden())
+        e.show_calibration({"kind": "gpu", "max_rpm": 3300, "min_duty": 30, "min_rpm": 980,
+                            "effective_min_duty": 40, "table": [[100, 3300], [40, 1000], [30, 980]]})
+        self.assertIn("30 % = 980 RPM", e.cal_text.text())
+        self.assertIn("Below 40 %", e.cal_text.text())
+        self.assertTrue(e.cal_use.isHidden())
 
 
     def test_find_my_cpu_fan_guide(self):
