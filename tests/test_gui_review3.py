@@ -258,6 +258,19 @@ class GuiReview3(Base):
         self.assertEqual(self.d.cfg["cpu_fans"], [spinning[1]])
         self.assertIn(spinning[1], dlg.marked)
         dlg.reject()
+        # most likely first: fans the BIOS drives from the CPU temperature; chipset fans and pumps last
+        from fanpilot.gui import CpuFanFinder
+        w.status = dict(w.status, fans=[
+            {"id": "n/pwm1", "label": "Fan 1", "kind": "board", "rpm": 700},
+            {"id": "n/pwm5", "label": "Fan 5", "kind": "board", "rpm": 1500, "bios_guess": "chipset"},
+            {"id": "n/pwm2", "label": "Fan 2", "kind": "board", "rpm": 720, "bios_guess": "cpu"},
+            {"id": "n/pwm3", "label": "Fan 3", "kind": "board", "rpm": 800, "bios_guess": "cpu"}])
+        d2 = CpuFanFinder(w)
+        self.assertEqual([c[0] for c in d2.candidates], ["n/pwm2", "n/pwm3", "n/pwm1", "n/pwm5"])
+        d2.reject()
+        self.d.identify.clear()
+        self.pump(lambda: False, timeout=1.8)                                # its delayed start passes
+        self.assertEqual(d2.i, -1, "closed before it started: no fan tried, nothing pulsed")
         # the banner links to it while the CPU fan is unknown
         w.status["cpu_fan_known"] = False
         w._update_banner()

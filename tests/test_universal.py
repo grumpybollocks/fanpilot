@@ -505,6 +505,38 @@ class AsusTufX570Plus(unittest.TestCase):
         finally:
             m.cleanup()
 
+    def test_bios_setup_hints(self):
+        """What the BIOS does with each header, read from the chip: the user confirmed pwm5 is the chipset fan
+        (X570), 4/6/7 are empty, and pwm6's 'full speed everywhere' is the pump header default."""
+        m = machine_from_report(json.load(open(os.path.join(REPORTS, "asus-tuf-gaming-x570-plus.json"))))
+        try:
+            hw = discover(m.root)
+            guess = {fid: (f.bios or {}).get("guess") for fid, f in hw.fans.items() if fid.startswith("nct")}
+            self.assertEqual(guess, {"nct6798/pwm1": "cpu", "nct6798/pwm2": "cpu", "nct6798/pwm3": "cpu",
+                                     "nct6798/pwm4": "cpu", "nct6798/pwm5": "chipset", "nct6798/pwm6": "pump",
+                                     "nct6798/pwm7": None})
+            b5 = hw.fans["nct6798/pwm5"].bios
+            self.assertEqual(b5["source"], "SMBUSMASTER 1")
+            self.assertIn("stopped below 55 °C", b5["hint"])
+            self.assertEqual(hw.cpu_fans, set(), "a guess never makes a CPU fan: only the user or the database")
+            d = Daemon(m.root, os.path.join(m.root, "c.json"), os.path.join(m.root, "run"),
+                       os.path.join(m.root, "run", "s.sock"))
+            d.tick(1000.0, 1.0)
+            self.assertEqual(d.fan_status["nct6798/pwm5"]["bios_guess"], "chipset")
+            self.assertTrue(all(d.protect_cpu(f) for f in d.hw.fans if f.startswith("nct")),
+                            "guesses change no protection")
+        finally:
+            m.cleanup()
+
+    def test_no_guess_on_it87(self):
+        """it87's pwmN_auto_channels_temp bitmask differs between driver builds: nothing is guessed."""
+        m = machine_from_report(json.load(open(os.path.join(REPORTS, "gigabyte-b550m-aorus-elite.json"))))
+        try:
+            hw = discover(m.root)
+            self.assertTrue(all(getattr(f, "bios", None) is None for f in hw.fans.values()))
+        finally:
+            m.cleanup()
+
 
 class RealReports(unittest.TestCase):
     """Every real report: discovery works, a daemon runs and writes nothing while every fan is Automatic."""
