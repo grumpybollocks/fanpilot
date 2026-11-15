@@ -229,5 +229,40 @@ class GuiReview3(Base):
         self.assertEqual(e.curve.points[0], [48.0, 30.0])
 
 
+    def test_find_my_cpu_fan_guide(self):
+        """Second real machine (2026-11-15): the user read 'Identifying' next to the fan the app was told to
+        pulse and took it as proof. The guide pulses each spinning fan and asks about the cooler instead."""
+        from fanpilot.hw import discover
+        hw = discover(self.m.root)
+        it = next(d for c, d in hw.chips.items() if hw.names[c].startswith("it8"))
+        for i, rpm in ((1, 900), (2, 1100), (3, 0)):                         # header 3: nothing to watch
+            with open(os.path.join(it, f"fan{i}_input"), "w") as f:
+                f.write(f"{rpm}\n")
+        self.start({"allowed_uids": [os.getuid()]})
+        w = self.w
+        w.refresh()
+        dlg = w.find_cpu_fan()
+        spinning = [f["id"] for f in w.status["fans"] if f.get("kind") == "board" and f.get("rpm")]
+        self.assertEqual([c[0] for c in dlg.candidates], spinning, "only fans that spin are shown")
+        self.assertEqual(len(spinning), 2)
+        self.pump(lambda: dlg.i == 0 and self.d.identify, timeout=5)        # starts by itself
+        self.assertIn(spinning[0], self.d.identify, "the service pulses the first fan")
+        self.assertFalse(dlg.yes_btn.isEnabled(), "no answer before the pulse has been seen")
+        dlg.t0 -= dlg.PULSE                                                  # the 6 s are over
+        dlg._tick()
+        self.assertTrue(dlg.yes_btn.isEnabled())
+        self.pump(lambda: not self.d.identify, timeout=10)                   # service finished that pulse
+        dlg.next_fan()                                                       # "No": the second fan
+        self.pump(lambda: spinning[1] in self.d.identify, timeout=5)
+        dlg.answer_yes()
+        self.assertEqual(self.d.cfg["cpu_fans"], [spinning[1]])
+        self.assertIn(spinning[1], dlg.marked)
+        dlg.reject()
+        # the banner links to it while the CPU fan is unknown
+        w.status["cpu_fan_known"] = False
+        w._update_banner()
+        self.assertIn("fanpilot:find-cpu", w.banner.text())
+
+
 if __name__ == "__main__":
     unittest.main()
