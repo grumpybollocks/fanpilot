@@ -237,6 +237,25 @@ class GuiReview3(Base):
         self.assertTrue(e.cal_use.isHidden())
 
 
+    def test_polls_less_in_the_tray(self):
+        self.start({"allowed_uids": [os.getuid()]})
+        w = self.w
+        w.timer.start(1000)
+        w._polling = False
+        w.hide()
+        w._tick()
+        self.assertEqual(w.timer.interval(), 3000, "hidden in the tray: every 3 s")
+        w.sensors_view._log = ("f", "w", [])                   # a CSV log keeps every second
+        w._polling = False
+        w._tick()
+        self.assertEqual(w.timer.interval(), 1000)
+        w.sensors_view._log = None
+        w._polling = False
+        w._tick()
+        w.show()
+        self.assertEqual(w.timer.interval(), 1000, "opened again: every second at once")
+        w.timer.stop()
+
     def test_find_my_cpu_fan_guide(self):
         """Second real machine (2026-11-15): the user read 'Identifying' next to the fan the app was told to
         pulse and took it as proof. The guide pulses each spinning fan and asks about the cooler instead."""

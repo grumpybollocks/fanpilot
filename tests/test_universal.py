@@ -568,6 +568,50 @@ class AsusTufX570Plus(unittest.TestCase):
             m.cleanup()
 
 
+class Lightweight(Machine):
+    """The service must stay light (2026-11-15: measured on a real machine, every NVMe temperature read is a
+    command to the drive, 0.6-7 ms each, 5 of them a second)."""
+    def setUp(self):
+        self.load(boards.asus_amd())
+        self.d = self.daemon()
+        self.ticks(self.d, 2)
+
+    def test_drive_temperatures_every_10_s(self):
+        d = self.d
+        nv = next(sid for sid in d.hw.sensors if sid.startswith("nvme"))
+        path = d.hw.sensors[nv].path
+        os.chmod(path, 0o644)
+        first = d.temps[nv]
+        with open(path, "w") as f:
+            f.write("61000\n")
+        cpu = d.hw.default_cpu_sensor()
+        os.chmod(os.path.join(self.m.k10, "temp1_input"), 0o644)       # report files are read-only
+        self.m.set_temp(self.m.k10, 1, 66)
+        self.ticks(d, 3)
+        self.assertEqual(d.temps[nv], first, "the drive is not asked again within 10 s")
+        self.assertEqual(d.temps[cpu], 66, "CPU (and every register-read sensor) still every tick")
+        d._slow_next = 0                                 # 10 s later
+        self.ticks(d)
+        self.assertEqual(d.temps[nv], 61)
+
+    def test_sensors_view_built_only_when_asked(self):
+        d = self.d
+        calls = []
+        real = d.readings_src.read
+        d.readings_src.read = lambda *a: (calls.append(1), real(*a))[1]
+        self.ticks(d, 5)
+        self.assertEqual(calls, [], "nobody asked: no work")
+        st = d.handle({"cmd": "status"}, 0)["status"]
+        self.assertTrue(st["readings"])
+        d.handle({"cmd": "status"}, 0)
+        self.assertEqual(len(calls), 1, "at most once per tick, however many ask")
+        self.ticks(d)
+        light = d.handle({"cmd": "status", "readings": False}, 0)["status"]
+        self.assertEqual((light["readings"], light["groups"]), ([], []))
+        self.assertEqual(len(calls), 1, "the light status builds nothing")
+        self.assertTrue(light["fans"] and light["sensors"], "fans and temperatures are still there")
+
+
 class MoreDrivers(Machine):
     def test_ram_and_drive_sensors(self):
         """RAM module sensors (jc42 / spd5118) go to the Memory group; drivetemp gets a plain name; a dead VBAT

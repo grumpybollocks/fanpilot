@@ -35,6 +35,11 @@ RECLAIM_LIMIT = 5         # [S6] reclaims within RECLAIM_WINDOW -> give up, back
 RECLAIM_WINDOW = 60.0
 GPU_VERIFY_EVERY = 30.0
 RESCAN_EVERY = 10.0       # look again for hardware that is missing (late driver, module reload)
+# Drive temperatures: every read is a real command to the drive (NVMe: a SMART log page, measured 0.6-7 ms
+# each; SATA drivetemp: an SCT/SMART command). They change over minutes, so they are read every 10 s and the
+# last value is reused in between. CPU/GPU/board sensors are plain register reads and stay every tick.
+SLOW_SENSOR_CHIPS = ("nvme", "drivetemp")
+SLOW_SENSOR_EVERY = 10.0
 CAL_ABORT_CPU = 80.0      # calibration aborts above this CPU temperature
 GPU_CAL_ABORT = 85.0      # graphics card measurement aborts at this hotspot temperature
 GPU_RETRY_AFTER = 60.0    # back-off after the GPU firmware rejected a curve
@@ -408,7 +413,10 @@ class Daemon:
         self.events: collections.deque = collections.deque(maxlen=200)
         self.hw = discover(root)
         self.readings_src = Readings(root, self.hw)   # HWiNFO-style Sensors view
-        self.readings: list = []
+        self._readings: list = []
+        self._readings_tick = -1        # the Sensors view list is built only when someone asks for it
+        self._tick_no = 0
+        self._slow_next = 0.0
         try:
             self.cfg = cfgmod.load(config_path, self.protect_cpu)
         except (cfgmod.ConfigError, ValueError) as e:
@@ -611,6 +619,23 @@ class Daemon:
             return "calibrating"
         return None
 
+    @property
+    def readings(self) -> list[dict]:
+        """Every reading for the Sensors view, built at most once per tick and only when asked (the app's
+        Sensors tab, renaming): nobody watching means no work. A failure here never touches fan control."""
+        if self._readings_tick != self._tick_no:
+            self._readings_tick = self._tick_no
+            try:
+                crit = dict(self.cfg["critical"], cpu_sensor=self.crit_sensor("cpu"),
+                            gpu_sensor=self.crit_sensor("gpu"))
+                self._readings = self.readings_src.read(self.temps, self.fan_status, crit)
+            except Exception as e:  # noqa: BLE001 -- display only
+                self._readings = []     # never show an old snapshot as current
+                if not getattr(self, "_readings_warned", False):
+                    self._readings_warned = True
+                    self.event("warn", f"Some sensor readings are unavailable: {e}")
+        return self._readings
+
     def _named_readings(self) -> list[dict]:
         names = self.cfg.get("names", {})
         if not names:
@@ -629,7 +654,17 @@ class Daemon:
 
     # -- control ----------------------------------------------------------------
     def read_temps(self) -> None:
-        self.temps = {sid: s.read() for sid, s in self.hw.sensors.items()}
+        now = time.monotonic()
+        slow_due = now >= self._slow_next
+        if slow_due:
+            self._slow_next = now + SLOW_SENSOR_EVERY
+        old, new = self.temps, {}
+        for sid, s in self.hw.sensors.items():
+            if not slow_due and sid in old and sid.split("/")[0].split("@")[0] in SLOW_SENSOR_CHIPS:
+                new[sid] = old[sid]
+            else:
+                new[sid] = s.read()
+        self.temps = new
 
     def check_critical(self) -> None:
         c = self.cfg["critical"]
@@ -1044,15 +1079,7 @@ class Daemon:
             except Exception as e:  # one fan's bug must not skip the others
                 log.exception("controlling %s failed", fan.id)
                 broken.append(f"{fan.label}: {e}")
-        try:
-            # every reading for the Sensors view; a failure here never touches fan control
-            crit = dict(self.cfg["critical"], cpu_sensor=self.crit_sensor("cpu"), gpu_sensor=self.crit_sensor("gpu"))
-            self.readings = self.readings_src.read(self.temps, self.fan_status, crit)
-        except Exception as e:      # noqa: BLE001 -- display only
-            self.readings = []      # never show an old snapshot as current
-            if not getattr(self, "_readings_warned", False):
-                self._readings_warned = True
-                self.event("warn", f"Some sensor readings are unavailable: {e}")
+        self._tick_no += 1            # the Sensors view list is now stale; built on the next request
         try:
             # snapshot for other programs (G510 LCD); tmpfs, so no disk writes
             export.write(os.path.join(self.run_dir, "sensors.tsv"), self.hw, self.temps, self.fan_status,
@@ -1154,7 +1181,7 @@ class Daemon:
             g.applied = None
 
     # -- API --------------------------------------------------------------------
-    def status(self) -> dict:
+    def status(self, readings: bool = True) -> dict:
         sensors = [{"id": sid, "label": self.label(sid, s.label), "value": self.temps.get(sid)}
                    for sid, s in self.hw.sensors.items()]
         fans = []
@@ -1175,8 +1202,8 @@ class Daemon:
             "events": list(self.events)[-50:],
             "disabled": dict(self.disabled),
             "active_profile": self.cfg.get("active_profile"),
-            "readings": self._named_readings(),
-            "groups": self.readings_src.group_list(self.readings),
+            "readings": self._named_readings() if readings else [],
+            "groups": self.readings_src.group_list(self.readings) if readings else [],
             "profiles": list(presets.BUILTIN_PROFILES) + sorted(self.cfg.get("profiles", {})),
             "cpu_sensor": self.crit_sensor("cpu"),
             "gpu_sensor": self.crit_sensor("gpu"),
@@ -1241,7 +1268,9 @@ class Daemon:
             if cmd == "hello":
                 return {"ok": True, "version": __version__, "can_write": writable}
             if cmd == "status":
-                return {"ok": True, "status": self.status(), "can_write": writable}
+                # the app hidden in the tray asks without the Sensors view list (readings: false)
+                return {"ok": True, "status": self.status(req.get("readings", True) is not False),
+                        "can_write": writable}
             if cmd == "get_config":
                 return {"ok": True, "config": self.cfg}
             if not writable:

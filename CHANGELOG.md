@@ -12,6 +12,11 @@
   flat firmware curve at 100, 90, … down to the card's minimum (about 10 s each) and shows the slowest it
   really runs (% and RPM), and below which setting the fan stops getting slower. Stops at 85 °C hotspot, on a
   hot CPU or an emergency; the card's own setting comes back afterwards. Also `fanpilotctl calibrate amdgpu/fan1`.
+* **Lighter:** drive temperatures (NVMe, SATA `drivetemp`) are read every 10 s instead of every second (each
+  read is a command to the drive: 0.6-7 ms per NVMe read was measured, 5 a second on a 3-SSD PC); the
+  Sensors view list is built only when the app or `fanpilotctl sensors` asks for it; the app hidden in the
+  tray polls every 3 s (every second again when opened or while a CSV log runs); other `fanpilotctl`
+  commands ask for a status without the sensor list.
 * **More drivers:** RAM module temperatures (`jc42`, `spd5118`) in the Memory group; `drivetemp` drives and
   Intel chipset (`pch_*`) sensors get plain names.
 

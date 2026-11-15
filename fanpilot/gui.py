@@ -1600,6 +1600,10 @@ class MainWindow(QMainWindow):
             return
         if self._polling:
             return          # the last request is still waiting on a stuck service: don't pile up more
+        # in the tray (window hidden, no CSV log running) every 3 s is plenty for the icon and alarms
+        want = 1000 if self.isVisible() or self.sensors_view._log else 3000
+        if self.timer.interval() != want:
+            self.timer.setInterval(want)
         self._ticks = getattr(self, "_ticks", 0) + 1
         self._polling = True
         self._poll_sent = time.monotonic()
@@ -2196,6 +2200,12 @@ class MainWindow(QMainWindow):
         if self._poller:
             self._poller.stop()
         QApplication.quit()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        if getattr(self, "timer", None) is not None and self.timer.interval() != 1000:
+            self.timer.setInterval(1000)         # opened from the tray: back to every second at once
+            QTimer.singleShot(0, self._tick)
 
     def closeEvent(self, e):
         self._save_geometry()
