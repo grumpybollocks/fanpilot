@@ -138,6 +138,7 @@ class CurveEditor(QWidget):
         self.points: list[list[float]] = []
         self.t_range = (20.0, 100.0)
         self.d_min = 0.0
+        self.d_floor = 0.0          # hard floor: points can't go below it (a card's firmware minimum)
         self.max_points = 8
         self.drag = None
         self.hover = None
@@ -149,8 +150,12 @@ class CurveEditor(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setToolTip("Drag points to shape the curve.\nDouble-click to add a point, right-click a point to remove it.")
 
-    def set_points(self, pts, t_range=(20.0, 100.0), d_min=0.0, max_points=8):
-        self.points = sorted([list(map(float, p)) for p in pts])
+    def set_points(self, pts, t_range=(20.0, 100.0), d_min=0.0, max_points=8, hard_floor=None):
+        """hard_floor: the lowest speed the hardware accepts (graphics card firmware). Points below it are
+        raised to it, so the graph shows what the card really runs; None keeps the current floor."""
+        if hard_floor is not None:
+            self.d_floor = float(hard_floor)
+        self.points = sorted([[float(t), max(float(d), self.d_floor)] for t, d in pts])
         self.t_range, self.d_min, self.max_points = t_range, d_min, max_points
         self.update()
 
@@ -281,7 +286,7 @@ class CurveEditor(QWidget):
         pts = sorted(self.points)
         if any(abs(t - pt[0]) < 2 for pt in pts):
             return
-        d = round(interpolate(pts, t)) if pts else 50
+        d = max(round(interpolate(pts, t)) if pts else 50, self.d_floor)
         self.points = sorted(pts + [[float(t), float(d)]])
         self.changed.emit()
         self.update()
@@ -300,7 +305,7 @@ class CurveEditor(QWidget):
         pts = self.points
         lo_t = pts[i - 1][0] + 1 if i > 0 else self.t_range[0]
         hi_t = pts[i + 1][0] - 1 if i < len(pts) - 1 else self.t_range[1]
-        lo_d = pts[i - 1][1] if i > 0 else 0
+        lo_d = max(pts[i - 1][1] if i > 0 else 0, self.d_floor)
         hi_d = pts[i + 1][1] if i < len(pts) - 1 else 100
         pts[i] = [float(round(max(lo_t, min(hi_t, t)))), float(round(max(lo_d, min(hi_d, d))))]
         self.changed.emit()
@@ -913,13 +918,13 @@ class FanEditor(QWidget):
         self.cpu_fan = cpu_fan
         if is_gpu:
             t_lo, t_hi = getattr(self, "gpu_temp_range", (25, 100))
-            self.curve.set_points(s["curve"], (float(t_lo), float(t_hi)), float(getattr(self, "gpu_duty", (20, 100))[0]),
-                                  getattr(self, "gpu_points", 5))
+            g_lo = float(getattr(self, "gpu_duty", (20, 100))[0])
+            self.curve.set_points(s["curve"], (float(t_lo), float(t_hi)), g_lo, getattr(self, "gpu_points", 5), g_lo)
             self.curve_note.setText("Uses the GPU hotspot temperature. The curve is stored in the card's "
                                     "firmware (5 points), so it keeps working even if FanPilot stops.")
             self.zero_rpm.setChecked(bool(s["zero_rpm"]))
         else:
-            self.curve.set_points(s["curve"], (20.0, 100.0), float(s["min_duty"]), 8)
+            self.curve.set_points(s["curve"], (20.0, 100.0), float(s["min_duty"]), 8, 0.0)
             self.curve_note.setText("")
             self.allow_stop.setChecked(bool(s["allow_stop"]) and not cpu_fan)
             self._update_minimums()
@@ -950,7 +955,7 @@ class FanEditor(QWidget):
 
     def _update_minimums(self):
         if self.is_gpu:
-            lo = 20
+            lo = int(getattr(self, "gpu_duty", (20, 100))[0])   # this card's own minimum (RX 9070 XT: 30 %)
         elif getattr(self, "cpu_fan", False):
             lo = CPU_FAN_FLOOR
         else:

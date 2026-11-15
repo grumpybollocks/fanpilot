@@ -1328,7 +1328,9 @@ class Daemon:
                         return {"ok": False, "error": f"not a motherboard fan on this PC: {', '.join(bad)}"}
                     cfg = json.loads(json.dumps(self.cfg))
                     cfg["cpu_fans"] = fans
-                    return {"ok": True, "config": self.set_config(cfg, uid)}
+                    saved = self.set_config(cfg, uid)
+                    self.rescan()       # headers the map found empty may be hidden now that the CPU fan is known
+                    return {"ok": True, "config": saved}
                 if cmd == "rescan":
                     self.rescan()
                     return {"ok": True}

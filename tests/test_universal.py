@@ -70,6 +70,17 @@ class AsusNuvoton(Machine):
         self.assertEqual(hw.default_cpu_sensor(), "k10temp/temp1")
         self.assertIsNone(hw.default_gpu_sensor())
 
+    def test_unconnected_pch_channels_reading_zero_hidden(self):
+        """Real TUF GAMING X570-PLUS (2026-11-15): nct6798 PCH_CHIP_TEMP & co. read exactly 0 on AMD boards."""
+        nct = self.chip_dir("nct6798")
+        for f, v in (("temp10_input", "0"), ("temp10_label", "PCH_CHIP_TEMP"),
+                     ("temp13_input", "50375"), ("temp13_label", "TSI0_TEMP")):
+            with open(os.path.join(nct, f), "w") as fh:
+                fh.write(v + "\n")
+        hw = discover(self.m.root)
+        self.assertNotIn("nct6798/temp10", hw.sensors, "0.000 °C = nothing connected")
+        self.assertIn("nct6798/temp13", hw.sensors, "a real reading next to it stays")
+
     def test_every_fan_protected_until_the_cpu_fan_is_marked(self):
         d = self.daemon({"allowed_uids": [0]})
         self.assertTrue(all(d.protect_cpu(f) for f in d.hw.fans))
@@ -209,11 +220,39 @@ class FanMappingTests(Machine):
         d.handle({"cmd": "map_cancel"}, 0)
 
     def test_unknown_cpu_fan_nothing_hidden(self):
-        d = self.daemon()                                    # CPU fan not known: every header protected
+        d = self.daemon({"allowed_uids": [0]})               # CPU fan not known: every header protected
         self.run_mapping(d)
         self.assertEqual(d.mapping.state, "done")
-        self.assertNotIn(None, d.cfg["fan_map"].values(), "no header hidden while any could be the CPU fan")
-        self.assertEqual(len(d.hw.fans), 7)
+        self.assertEqual(len(d.hw.fans), 7, "no header hidden while any could be the CPU fan")
+        # ...but what the run proved is kept: 3, 5-7 drive nothing (every spinning tach is claimed)
+        self.assertEqual(d.cfg["fan_map"], {"nct6798/pwm1": "fan1_input", "nct6798/pwm2": "fan3_input",
+                                            "nct6798/pwm3": None, "nct6798/pwm4": "fan4_input",
+                                            "nct6798/pwm5": None, "nct6798/pwm6": None, "nct6798/pwm7": None})
+        self.assertTrue(any("shown until you mark the CPU fan" in x for x in d.mapping.details))
+        # marking the CPU fan hides them at once: no second mapping run
+        self.assertTrue(d.handle({"cmd": "set_cpu_fans", "fans": ["nct6798/pwm1"]}, 0)["ok"])
+        self.assertEqual(sorted(d.hw.fans), ["nct6798/pwm1", "nct6798/pwm2", "nct6798/pwm4"])
+        for i in range(1, 8):
+            self.assertEqual(self.val("nct6798", f"pwm{i}_enable"), "5", f"pwm{i} still on Smart Fan IV")
+        # marking an empty header as the CPU fan instead keeps that one
+        d.handle({"cmd": "map_forget"}, 0)
+        d.handle({"cmd": "set_cpu_fans", "fans": []}, 0)
+        self.run_mapping(d)
+        self.assertTrue(d.handle({"cmd": "set_cpu_fans", "fans": ["nct6798/pwm3"]}, 0)["ok"])
+        self.assertIn("nct6798/pwm3", d.hw.fans, "a marked CPU fan is never hidden")
+
+    def test_unknown_cpu_fan_unclaimed_spinning_tach_keeps_warning(self):
+        """A spinning fan no header slowed (DC fan?) could be on any silent header: nothing recorded."""
+        d = self.daemon()
+
+        def dc_fan():
+            with open(os.path.join(self.nct, "fan6_input"), "w") as f:
+                f.write("1500\n")
+        self.run_mapping(d, before_tick=dc_fan)
+        self.assertEqual(d.mapping.state, "done")
+        for h in (3, 5, 7):
+            self.assertNotIn(f"nct6798/pwm{h}", d.cfg["fan_map"], f"pwm{h} undecided: could drive fan6")
+        self.assertTrue(any("mark the CPU fan first, then map again" in x for x in d.mapping.details))
 
     def test_dc_fan_that_does_not_slow_is_kept(self):
         self.WIRING = {}                                     # tachometers spin, nothing reacts to PWM
@@ -447,6 +486,24 @@ class UnknownBoardGui(Machine):
             w.close()
             d.stop_event.set()
             t.join(5)
+
+
+class AsusTufX570Plus(unittest.TestCase):
+    """Real report, 2026-11-15: ASUS TUF GAMING X570-PLUS (nct6798, not in the board database) + RX 9070 XT."""
+    def test_detection(self):
+        from fanpilot import amdgpu
+        m = machine_from_report(json.load(open(os.path.join(REPORTS, "asus-tuf-gaming-x570-plus.json"))))
+        try:
+            hw = discover(m.root)
+            self.assertEqual(hw.board_chips, ["nct6798"])
+            self.assertIsNone(hw.board)
+            self.assertEqual(sorted(f for f in hw.fans if f.startswith("nct")), [f"nct6798/pwm{i}" for i in range(1, 8)])
+            for i in (10, 11, 12):                    # PCH_* channels: exactly 0 °C on this AMD board
+                self.assertNotIn(f"nct6798/temp{i}", hw.sensors)
+            self.assertIn("nct6798/temp13", hw.sensors, "TSI0_TEMP is real")
+            self.assertEqual(amdgpu.read_info(hw.fans["amdgpu/fan1"].fan_ctrl_dir).duty_range, (30, 100))
+        finally:
+            m.cleanup()
 
 
 class RealReports(unittest.TestCase):

@@ -292,8 +292,9 @@ def discover(root: str = "/") -> Hardware:
             else:
                 if board:
                     v = sen.read()
-                    if v is None or not 0 <= v <= 120:
-                        continue               # unknown board: -128 / 127 / -62 = nothing connected
+                    if v is None or not 0 < v <= 120:
+                        continue               # unknown board: -128 / 127 / -62 / exactly 0 = nothing connected
+                                               # (nct6798 PCH_* channels on AMD boards read 0.000 °C)
                 label = KNOWN_LABELS.get((base_name, raw_label))
                 if label is None and base_name in ("coretemp",) and raw_label.startswith("Core "):
                     label = f"CPU core {raw_label[5:]}"

@@ -83,7 +83,7 @@ class FanMapping:
             self.details.append("No fan speed readings on this chip: nothing to map.")
             self.finish("done")
             return
-        spinning_own = []
+        spinning_own, unknown_cpu = [], []
         for n, fan in enumerate(fans):
             self.step = f"Slowing {fan.label} to {LOW:.0f} %"
             self.progress = (n + 0.5) / len(fans)
@@ -103,6 +103,10 @@ class FanMapping:
                 self.details.append(f"{fan.label} ({fan.id}) drives {tach.split('/')[-1][:-6]}{extra}")
             elif dropped:
                 self.details.append(f"{fan.label} ({fan.id}) slows a fan on another chip; left as it was")
+            elif self.d.hw.board is None and self.d.protect_cpu(fan.id) and not self.d.known_cpu_fan(fan.id):
+                # protected only because nobody has marked the CPU fan yet: decided below, once every
+                # header has been tried
+                unknown_cpu.append(fan)
             elif self.d.protect_cpu(fan.id) or self.d.hw.board is not None:
                 why = ("the board database lists it" if self.d.hw.board is not None else
                        "it may be the CPU fan: mark the CPU fan first, then map again" if not self.d.known_cpu_fan(fan.id)
@@ -127,6 +131,19 @@ class FanMapping:
             else:
                 self.details.append(f"{fan.label} ({fan.id}): its fan did not slow down at {LOW:.0f} % (DC fan or "
                                     "pump without speed control?); kept as it is")
+        for fan in unknown_cpu:
+            chip = fan.id.split("/")[0]
+            spinning = {k for k, v in base.items() if v > 0 and k.split("/")[0] == chip}
+            if spinning <= claimed:
+                # every fan that spins is driven by another header, so this one drives nothing that has a
+                # speed reading. Recorded as empty; _apply_fan_map still keeps it while it could be the CPU
+                # fan, and hides it as soon as the CPU fan is marked (no second mapping run needed).
+                self.result[fan.id] = None
+                self.details.append(f"{fan.label} ({fan.id}): nothing connected (every spinning fan belongs to "
+                                    "another header); shown until you mark the CPU fan, then hidden")
+            else:
+                self.details.append(f"{fan.label} ({fan.id}): no fan slowed down; kept (it may be the CPU fan: "
+                                    "mark the CPU fan first, then map again)")
         self.step = "Finished"
         self.finish("done")
 
