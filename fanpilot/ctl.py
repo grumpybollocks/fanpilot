@@ -139,6 +139,9 @@ def main(argv=None) -> int:
                 while True:
                     time.sleep(1)
                     st = cl.call("status")["status"]["selftest"]
+                    if not st:                         # the service restarted: the test was stopped
+                        print("stopped: the service restarted; fans are back to their settings")
+                        return 1
                     for r in st["results"][shown:]:
                         mark = {True: "PASS", False: "FAIL", None: "SKIP"}[r["ok"]]
                         print(f"  {mark}  {r['name']}: {r['detail']}")
@@ -171,6 +174,9 @@ def main(argv=None) -> int:
                 while True:
                     time.sleep(2)
                     mpi = cl.call("status")["status"]["mapping"]
+                    if not mpi:                        # the service restarted: mapping was stopped
+                        print("stopped: the service restarted; fans are back to their settings")
+                        return 1
                     if mpi["state"] != "running":
                         print("\n".join(mpi["details"]) or mpi["step"])
                         return 0 if mpi["state"] == "done" else 1

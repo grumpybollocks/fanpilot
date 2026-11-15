@@ -775,11 +775,16 @@ class Daemon:
                 "target": None, "temp": temp, "flags": [self.busy_with(fid)]}
             return
         fc = self.fan_cfg(fid)
+        if self.critical:
+            # emergency (CPU or GPU too hot): the graphics card fan runs at full speed too, whatever its
+            # setting; when it ends, the normal path below re-applies the setting or hands it back
+            fc = {**fc, "mode": "fixed", "fixed": 100.0}
         p = fan.pwm()
         self.fan_status[fid] = {
-            "id": fid, "label": fan.label, "kind": "gpu", "control": "pmfw", "mode": fc["mode"],
+            "id": fid, "label": fan.label, "kind": "gpu", "control": "pmfw", "mode": self.fan_cfg(fid)["mode"],
             "rpm": fan.rpm(), "duty": round(pwm_to_duty(p), 1) if p is not None else None,
-            "target": None, "temp": temp, "flags": ["error"] if g.error else [], "error": g.error,
+            "target": None, "temp": temp, "flags": (["error"] if g.error else []) + (["critical"] if self.critical else []),
+            "error": g.error,
         }
         if g.ranges is None:                   # the card's own limits, for the app's editor (read once)
             try:
@@ -1372,7 +1377,7 @@ class Daemon:
                             raise ValueError("request must be an object")
                         with daemon.lock:  # serialise while nothing can change underneath
                             out = json.dumps(daemon.handle(req, uid))
-                    except ValueError as e:
+                    except (ValueError, RecursionError) as e:   # (deeply nested JSON: RecursionError)
                         out = json.dumps({"ok": False, "error": f"bad request: {e}"})
                     self.wfile.write((out + "\n").encode())
 

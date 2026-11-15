@@ -8,7 +8,7 @@ labels: bug
 
 **Your PC**
 - Distribution and version:
-- How FanPilot is installed (AUR / .deb / .rpm / install.sh):
+- How FanPilot is installed (.deb / .rpm / install.sh / AUR):
 - `fanpilotctl status` output:
 
 **Hardware report** (anonymised: no serial numbers, host or user names)

@@ -53,7 +53,7 @@ class CoreReview3(Base):
         os.remove(os.path.join(self.m.k10, "temp1_input"))
         self.ticks(d, dmod.FAIL_TICKS)
         self.assertTrue(d.critical)
-        self.assertIn("unreadable", d.events[-1]["msg"])
+        self.assertTrue(any("unreadable" in e["msg"] for e in list(d.events)[-3:]), list(d.events)[-3:])   # (the GPU fan's switch to 100 % may follow)
         self.m.cpu(50)                                       # reads again, and cool
         self.ticks(d, 1)
         self.assertFalse(d.critical)

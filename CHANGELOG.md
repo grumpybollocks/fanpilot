@@ -1,8 +1,19 @@
 # Changelog
 
-## Unreleased
+## 1.0.1
 
-Found on a second real machine (ASUS TUF GAMING X570-PLUS, Nuvoton NCT6798, AMD RX 9070 XT); its report is
+* **Emergency mode covers the graphics card too:** above a CPU or GPU emergency limit, an AMD RX 7000/9000
+  card's fan now also runs at full speed (before, only motherboard fans did); it returns to its setting after.
+* Writes only to the Fintek and Winbond chips their drivers really cover (f71882fg / w83627ehf chip lists);
+  other chips of those makers are shown read-only.
+* The app launcher explains a missing PySide6 (message + desktop notification) instead of failing silently.
+* A malformed (deeply nested) request no longer writes a traceback to the journal; `fanpilotctl selftest` and
+  `fanpilotctl map` stop cleanly if the service restarts meanwhile.
+* Docs: download links and step-by-step install per distribution, the AUR package marked as coming, the
+  OverDrive fix includes rebuilding the initramfs, corrected claims (the GPU curve returns to the card's
+  control when FanPilot stops), SECURITY.md; release notes come from this file.
+
+**Found on a second real machine** (ASUS TUF GAMING X570-PLUS, Nuvoton NCT6798, AMD RX 9070 XT); its report is
 now a test machine (`tests/reports/asus-tuf-gaming-x570-plus.json`).
 
 * **Sensors:** on boards not in the database, channels reading exactly 0 °C are treated as unconnected

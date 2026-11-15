@@ -117,7 +117,8 @@ footer { padding: 34px 0 50px; border-top: 1px solid var(--line); color: var(--m
     <span class="badge"><b>216</b> automated tests</span>
   </div>
   <div class="cta">
-    <a class="btn primary" href="#install">Install</a>
+    <a class="btn primary" href="https://github.com/grumpybollocks/fanpilot/releases/latest">⬇ Download 1.0.1</a>
+    <a class="btn" href="#install">How to install</a>
     <a class="btn" href="#hardware">Supported hardware</a>
     <a class="btn" href="https://github.com/grumpybollocks/fanpilot">Source on GitHub</a>
   </div>
@@ -161,8 +162,8 @@ footer { padding: 34px 0 50px; border-top: 1px solid var(--line); color: var(--m
   <div class="feature flip">
     <div class="text">
       <h3>🎮 Graphics card curve in firmware</h3>
-      <p>For AMD RX 7000 / 9000 cards with OverDrive enabled, FanPilot writes your curve into the card itself. It keeps
-        working even if FanPilot is stopped, and <i>zero-RPM</i> (fan off when cool) is your choice.</p>
+      <p>For AMD RX 7000 / 9000 cards with OverDrive enabled, FanPilot writes your curve into the card itself, so the
+        card runs it without polling; when FanPilot stops, the card goes back to its own control. <i>Zero-RPM</i> (fan off when cool) is your choice.</p>
       <ul>
         <li>Follows the GPU hotspot temperature</li>
         <li>Every write is read back and checked</li>
@@ -179,7 +180,7 @@ footer { padding: 34px 0 50px; border-top: 1px solid var(--line); color: var(--m
         top of the window, from the tray icon, or from the command line.</p>
       <ul>
         <li><b>Self-test button</b>: ✔/✖ for the chip, sensors, speed control, crash recovery and GPU curve (about 45 s, no password)</li>
-        <li>Emergency limits: above them every motherboard fan runs at full speed</li>
+        <li>Emergency limits: above them every fan runs at full speed, the graphics card's too</li>
         <li>Built-in profiles keep each fan's measured lowest speed</li>
       </ul>
     </div>
@@ -243,25 +244,41 @@ footer { padding: 34px 0 50px; border-top: 1px solid var(--line); color: var(--m
     Full guide: <a href="https://github.com/grumpybollocks/fanpilot/blob/main/docs/SETUP.md">docs/SETUP.md</a>.</p>
   <div class="steps">
     <div class="step"><div>
-      <h4>Packages (after the first public release)</h4>
-      <p>Arch, Manjaro, EndeavourOS: AUR package <code>fanpilot</code>, app: <code>sudo pacman -S pyside6</code>.
-        Debian 13+, Ubuntu 24.10+: the <code>.deb</code>; Fedora 43+: the <code>.rpm</code>, both from the GitHub releases page.</p>
-      <pre>sudo usermod -aG fanpilot $USER          <span class="c"># then log out and in</span>
+      <h4>Download</h4>
+      <p><a class="btn primary" href="https://github.com/grumpybollocks/fanpilot/releases/latest">⬇ FanPilot 1.0.1</a></p>
+      <p><a href="https://github.com/grumpybollocks/fanpilot/releases/download/v1.0.1/fanpilot_1.0.1_all.deb">.deb</a> (Debian/Ubuntu) ·
+        <a href="https://github.com/grumpybollocks/fanpilot/releases/download/v1.0.1/fanpilot-1.0.1-1.noarch.rpm">.rpm</a> (Fedora) ·
+        <a href="https://github.com/grumpybollocks/fanpilot/archive/refs/tags/v1.0.1.tar.gz">source</a> ·
+        <a href="https://github.com/grumpybollocks/fanpilot/releases/download/v1.0.1/SHA256SUMS">SHA256SUMS</a></p>
+    </div></div>
+    <div class="step"><div>
+      <h4>Debian 13+, Ubuntu 24.10+</h4>
+      <pre>wget https://github.com/grumpybollocks/fanpilot/releases/download/v1.0.1/fanpilot_1.0.1_all.deb
+sudo apt install ./fanpilot_1.0.1_all.deb    <span class="c"># also installs PySide6 for the app</span>
+sudo usermod -aG fanpilot $USER              <span class="c"># lets you change settings; log out and in once</span>
+sudo systemctl enable --now fanpilotd        <span class="c"># start now and at every boot</span></pre>
+    </div></div>
+    <div class="step"><div>
+      <h4>Fedora 43+</h4>
+      <pre>sudo dnf install https://github.com/grumpybollocks/fanpilot/releases/download/v1.0.1/fanpilot-1.0.1-1.noarch.rpm
+sudo usermod -aG fanpilot $USER              <span class="c"># then log out and in once</span>
 sudo systemctl enable --now fanpilotd</pre>
     </div></div>
     <div class="step"><div>
-      <h4>Or from source (any distribution)</h4>
-      <p>Runs the test suite first, then installs. Every fan starts on Automatic.</p>
-      <pre>git clone https://github.com/grumpybollocks/fanpilot.git &amp;&amp; cd fanpilot
+      <h4>Arch, Manjaro, EndeavourOS — or any distribution, from source</h4>
+      <p>Runs the test suite first, installs, starts the service and gives your user the right to change settings.
+        An AUR package is coming.</p>
+      <pre>sudo pacman -S --needed git python pyside6   <span class="c"># Arch family; elsewhere: git, python3, PySide6</span>
+git clone https://github.com/grumpybollocks/fanpilot.git &amp;&amp; cd fanpilot
 sudo ./install.sh --autostart      <span class="c"># tray icon at login; undo: sudo ./uninstall.sh</span></pre>
-      <p>No PySide6 package on your distribution (Ubuntu 24.04, Debian 12)? Add <code>--gui-venv</code>.</p>
+      <p>Ubuntu 24.04 and Debian 12 have no PySide6 package: add <code>--gui-venv</code>.</p>
     </div></div>
     <div class="step"><div>
       <h4>Motherboard driver (ITE boards)</h4>
       <p>Boards with an ITE chip (most Gigabyte, some ASRock) usually need the <code>it87</code> driver set up. Nuvoton boards
         normally work out of the box; the graphics card needs nothing.</p>
-      <pre>sudo scripts/install-driver.sh          <span class="c"># from a package: sudo fanpilot-install-driver; undo: --undo</span>
-scripts/install-driver.sh --dry-run     <span class="c"># see every step first, nothing is changed</span></pre>
+      <pre>fanpilot-install-driver --dry-run       <span class="c"># see every step first, nothing is changed</span>
+sudo fanpilot-install-driver            <span class="c"># from the source folder: sudo scripts/install-driver.sh; undo: --undo</span></pre>
     </div></div>
     <div class="step"><div>
       <h4>First run</h4>
@@ -313,7 +330,7 @@ fanpilotctl import my-fans.json</pre>
 <section id="verified"><div class="wrap">
   <h2>Verified on the reference machine</h2>
   <p class="sub">Gigabyte B550M AORUS ELITE (ITE IT8688E fan chip) with an AMD Radeon RX 9060 XT. The current version is
-    1.0.0 (the same code as 0.7.4, whose self-test passed all 14 checks here); each result lists the version it was measured with. The self-test repeats the core checks on any PC.</p>
+    1.0.1; each result lists the version it was measured with. The self-test repeats the core checks on any PC.</p>
   <table>
     <tr><th>Check</th><th>Result</th><th>Version · notes</th></tr>
     <tr><td>Fan chip</td><td class="ok">IT8688E</td><td>≤ 0.2.2 · the kernel's built-in driver can't run it; the DKMS driver was built on kernel 7.2.9</td></tr>
@@ -344,7 +361,7 @@ fanpilotctl import my-fans.json</pre>
 <section id="faq"><div class="wrap">
   <h2>FAQ</h2>
   <details><summary>Will it make my PC run hotter?</summary>
-    <p>Only if you choose a quieter curve. The emergency limits still force every motherboard fan to full speed above
+    <p>Only if you choose a quieter curve. The emergency limits still force every fan (graphics card included) to full speed above
       90 °C (CPU) or 100 °C (GPU hotspot), and a fan whose sensor can't be read goes to 100 %.</p></details>
   <details><summary>What happens if I uninstall it, or it crashes?</summary>
     <p>Every fan goes back to exactly what the BIOS and the graphics card do without FanPilot. The self-test checks this.

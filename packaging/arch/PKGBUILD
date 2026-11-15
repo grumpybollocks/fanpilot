@@ -1,6 +1,6 @@
 # Maintainer: grumpybollocks <grumpybollocks@users.noreply.github.com>
 pkgname=fanpilot
-pkgver=1.0.0
+pkgver=1.0.1
 pkgrel=1
 pkgdesc="Safe fan control for Linux desktops: motherboard (hwmon) and graphics card fans, HWiNFO-style sensors"
 arch=('any')
