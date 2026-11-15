@@ -17,6 +17,10 @@
   Sensors view list is built only when the app or `fanpilotctl sensors` asks for it; the app hidden in the
   tray polls every 3 s (every second again when opened or while a CSV log runs); other `fanpilotctl`
   commands ask for a status without the sensor list.
+* **Fewer expensive hardware reads:** a header's duty register is read only when FanPilot (not the BIOS) drives
+  it (0.35 ms of kernel time per read on an NCT6798); the graphics card's temperatures, fan speed and duty
+  are read together at the end of the tick, so amdgpu fetches them from the card's firmware once per
+  second instead of twice (each fetch ~1 ms of kernel time on an RX 9070 XT).
 * **More drivers:** RAM module temperatures (`jc42`, `spd5118`) in the Memory group; `drivetemp` drives and
   Intel chipset (`pch_*`) sensors get plain names.
 

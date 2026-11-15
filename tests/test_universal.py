@@ -612,6 +612,42 @@ class Lightweight(Machine):
         self.assertTrue(light["fans"] and light["sensors"], "fans and temperatures are still there")
 
 
+class LightweightReads(Machine):
+    """Kernel-side costs measured on a real NCT6798 + RX 9070 XT (2026-11-15): a pwm read 0.35 ms; an amdgpu
+    reading ~1 ms when its firmware data is older than ~1 ms, ~0.03 ms right after another."""
+    def test_bios_fans_duty_register_not_read(self):
+        self.load(boards.asus_amd())
+        d = self.daemon()
+        self.ticks(d, 2)
+        reads = []
+        for f in d.hw.fans.values():
+            if f.kind == "board":
+                real = f.pwm
+                f.pwm = (lambda fid=f.id, real=real: (reads.append(fid), real())[1])
+        self.ticks(d, 3)
+        self.assertEqual(reads, [], "every header is on BIOS control: its duty register means nothing")
+        self.assertTrue(all(d.fan_status[f]["duty"] is None for f in d.hw.fans if f.startswith("nct")))
+
+    def test_graphics_card_read_in_one_burst(self):
+        self.load(json.load(open(os.path.join(REPORTS, "asus-tuf-gaming-x570-plus.json"))))
+        d = self.daemon()
+        self.ticks(d, 2)
+        order = []
+        gpu = d.hw.fans["amdgpu/fan1"]
+        for sid, sen in d.hw.sensors.items():
+            real = sen.read
+            sen.read = (lambda sid=sid, real=real: (order.append(sid), real())[1])
+        for name in ("rpm", "pwm"):
+            real = getattr(gpu, name)
+            setattr(gpu, name, (lambda name=name, real=real: (order.append("gpu:" + name), real())[1]))
+        self.ticks(d)
+        tail = [x for x in order if x.startswith(("amdgpu", "gpu:"))]
+        self.assertEqual(order[-len(tail):], tail, "graphics card readings are the last ones, together")
+        self.assertEqual(tail[-2:], ["gpu:rpm", "gpu:pwm"])
+        self.assertEqual(order.count("gpu:rpm"), 1, "fan speed read once per tick, with the temperatures")
+        self.assertEqual(d.fan_status["amdgpu/fan1"]["rpm"], gpu.rpm())
+
+
 class MoreDrivers(Machine):
     def test_ram_and_drive_sensors(self):
         """RAM module sensors (jc42 / spd5118) go to the Memory group; drivetemp gets a plain name; a dead VBAT

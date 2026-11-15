@@ -430,6 +430,7 @@ class Daemon:
         self.disabled: dict[str, str] = {}
         self.fan_status: dict[str, dict] = {}
         self.temps: dict[str, float | None] = {}
+        self.gpu_now: dict[str, tuple] = {}     # graphics card fan (rpm, pwm), read with its temperatures
         self.critical = False
         self.gpu: dict[str, GpuState] = collections.defaultdict(GpuState)
         self.nvidia = nvidia.NvidiaSmi() if root == "/" else None   # tests inject a fake
@@ -659,12 +660,18 @@ class Daemon:
         if slow_due:
             self._slow_next = now + SLOW_SENSOR_EVERY
         old, new = self.temps, {}
-        for sid, s in self.hw.sensors.items():
+        # graphics card values last and in one burst: amdgpu fetches them from the card's firmware (about
+        # 1 ms of kernel time, measured on an RX 9070 XT) and keeps them only ~1 ms, so reads spread over the
+        # tick would each pay for a new fetch
+        gpu_chips = {f.hwmon_dir for f in self.hw.fans.values() if isinstance(f, GpuFan)}
+        order = sorted(self.hw.sensors.items(), key=lambda kv: os.path.dirname(kv[1].path or "") in gpu_chips)
+        for sid, s in order:
             if not slow_due and sid in old and sid.split("/")[0].split("@")[0] in SLOW_SENSOR_CHIPS:
                 new[sid] = old[sid]
             else:
                 new[sid] = s.read()
         self.temps = new
+        self.gpu_now = {f.id: (f.rpm(), f.pwm()) for f in self.hw.fans.values() if isinstance(f, GpuFan)}
 
     def check_critical(self) -> None:
         c = self.cfg["critical"]
@@ -710,8 +717,10 @@ class Daemon:
             self.fan_status[fid] = st
             self.next_rescan = 0.0          # driver reloaded / hwmon renumbered: find it again
             return
-        p = fan.pwm()
         en = fan.enable()
+        # the duty register only when it means something (manual): on nct6798 a pwm read costs 0.35 ms of
+        # kernel time (measured), and under BIOS control the value would be thrown away anyway
+        p = fan.pwm() if en == 1 else None
         # under BIOS control the pwm register is stale (verified on the reference machine): don't report it as a duty
         # mode 0 = full speed (also how it87 shows a manual fan at 255)
         st["duty"] = 100.0 if en == 0 else round(pwm_to_duty(p), 1) if p is not None and en == 1 else None
@@ -879,11 +888,11 @@ class Daemon:
             return
         fid, g = fan.id, self.gpu[fan.id]
         temp = self.temps.get(self.own_sensor(fid) or "")
+        rpm, p = self.gpu_now.get(fid) or (fan.rpm(), fan.pwm())    # read with the card's temperatures
         if self.busy_with(fid):
-            p = fan.pwm()
             self.fan_status[fid] = {
                 "id": fid, "label": fan.label, "kind": "gpu", "control": "pmfw", "mode": self.fan_cfg(fid)["mode"],
-                "rpm": fan.rpm(), "duty": round(pwm_to_duty(p), 1) if p is not None else None,
+                "rpm": rpm, "duty": round(pwm_to_duty(p), 1) if p is not None else None,
                 "target": None, "temp": temp, "flags": [self.busy_with(fid)]}
             return
         fc = self.fan_cfg(fid)
@@ -891,10 +900,9 @@ class Daemon:
             # emergency (CPU or GPU too hot): the graphics card fan runs at full speed too, whatever its
             # setting; when it ends, the normal path below re-applies the setting or hands it back
             fc = {**fc, "mode": "fixed", "fixed": 100.0}
-        p = fan.pwm()
         self.fan_status[fid] = {
             "id": fid, "label": fan.label, "kind": "gpu", "control": "pmfw", "mode": self.fan_cfg(fid)["mode"],
-            "rpm": fan.rpm(), "duty": round(pwm_to_duty(p), 1) if p is not None else None,
+            "rpm": rpm, "duty": round(pwm_to_duty(p), 1) if p is not None else None,
             "target": None, "temp": temp, "flags": (["error"] if g.error else []) + (["critical"] if self.critical else []),
             "error": g.error,
         }
