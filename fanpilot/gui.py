@@ -703,8 +703,12 @@ class FanEditor(QWidget):
         self.title.setFont(f)
         self.live = QLabel()
         self.live.setTextFormat(Qt.RichText)
+        self.bios_hint = QLabel()               # what the BIOS does with this header (Nuvoton chips)
+        self.bios_hint.setWordWrap(True)
+        self.bios_hint.setEnabled(False)        # greyed: a hint, not a setting
         lay.addWidget(self.title)
         lay.addWidget(self.live)
+        lay.addWidget(self.bios_hint)
 
         mode_box = QGroupBox("How should this fan be controlled?")
         ml = QHBoxLayout(mode_box)             # one row: three stacked radio buttons cost ~80 px of height
@@ -1044,6 +1048,10 @@ class FanEditor(QWidget):
     # -- live updates
     def update_live(self, fan: dict, calibration, writable: bool):
         self.writable = writable
+        hint = fan.get("bios_hint") or ""
+        if self.bios_hint.text() != hint:
+            self.bios_hint.setText(hint)
+        self.bios_hint.setVisible(bool(hint))
         self.apply_btn.setEnabled(self.is_dirty and writable)
         rpm = fan.get("rpm")
         duty = fan.get("duty")
@@ -1156,7 +1164,11 @@ class CpuFanFinder(QDialog):
         self.setMinimumWidth(460)
         fans = win.status.get("fans", [])
         # only fans that spin can be seen changing; empty headers would waste the user's time
-        self.candidates = [(f["id"], f["label"]) for f in fans if f.get("kind") == "board" and (f.get("rpm") or 0) > 0]
+        spinning = [f for f in fans if f.get("kind") == "board" and (f.get("rpm") or 0) > 0]
+        # most likely first: fans the BIOS drives from the CPU temperature, chipset fans and pumps last
+        order = {"cpu": 0, None: 1, "chipset": 2, "pump": 3}
+        spinning.sort(key=lambda f: order.get(f.get("bios_guess"), 1))     # stable: header order within a group
+        self.candidates = [(f["id"], f["label"]) for f in spinning]
         self.marked = set(win.config.get("cpu_fans", [])) & {f["id"] for f in fans}
         self.i = -1
         self.t0 = None
@@ -1212,6 +1224,8 @@ class CpuFanFinder(QDialog):
         self.question.setVisible(more)
 
     def next_fan(self):
+        if not self.isVisible():
+            return                  # closed before the delayed start: pulse nothing
         self.i += 1
         if self.i >= len(self.candidates):
             if self.marked:
@@ -1739,7 +1753,11 @@ class MainWindow(QMainWindow):
             mode = modes.get(f.get("mode"), "")
             flags = f.get("flags") or []
             warn = " ⚠" if any(x in flags for x in ("critical", "sensor_failed", "gave_up", "write_error", "error", "stalled")) else ""
-            self.fan_list.item(i).setText(f"{f['label']}\n{rpm if rpm is not None else '—'} RPM · {mode}{warn}")
+            # a guess from the BIOS's own setup, only while the fan still has its generic name
+            guess = {"pump": " · pump header?", "chipset": " · chipset fan?"}.get(f.get("bios_guess"), "") \
+                if re.fullmatch(r"Fan \d+", f["label"]) else ""
+            self.fan_list.item(i).setText(f"{f['label']}\n{rpm if rpm is not None else '—'} RPM · {mode}{guess}{warn}")
+            self.fan_list.item(i).setToolTip(f.get("bios_hint") or "")
         cur = self.editor.fan_id
         jobs = any((self.status.get(k) or {}).get("state") == "running" for k in ("selftest", "mapping"))
         for f in fans:

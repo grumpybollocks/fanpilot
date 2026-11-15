@@ -13,6 +13,11 @@ now a test machine (`tests/reports/asus-tuf-gaming-x570-plus.json`).
 * **Find my CPU fan (new):** a guide (banner link, or right-click a fan) that pulses each spinning
   motherboard fan in turn with a countdown and asks whether the fan on the CPU cooler changed; "Yes" marks it.
   The app's "Identifying" label only says which header was *told* to pulse, not which fan is wired to it.
+* **What the BIOS does with each header (new, Nuvoton NCT67xx boards):** read from the chip, shown under the
+  fan's name and as its tooltip: the temperature it follows and its curve. From that, a cautious guess:
+  *pump header?* (full speed at every temperature), *chipset fan?* (X570, non-CPU sensor, stops when cool), or
+  "follows the CPU" (Find my CPU fan tries those first). A guess never makes a CPU fan or changes any
+  protection. ITE (it87) boards get no guess: their source bitmask differs between driver builds.
 * **Graphics card curve / fixed speed:** points can no longer be set below the card's own firmware minimum
   (RX 9070 XT: 30 %), and saved points below it are shown at the speed the card really runs. The fixed-speed
   minimum is the card's reported one instead of a fixed 20 %.
