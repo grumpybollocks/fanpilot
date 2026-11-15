@@ -23,8 +23,10 @@ CONTROL_CHIP_RE = re.compile(
     r"^(it8\d{3}"                                 # it87 (in-tree and frankcrawford/it87)
     r"|nct6106|nct6116|nct6126|nct5585|nct67(?:7[569]|9[1-9])"  # nct6775 family
     r"|nct6687"                                    # nct6687d (MSI, out-of-tree)
-    r"|f71[0-9]{3}[a-z]*|f81[0-9]{3}[a-z]*|f8000"  # f71882fg family
-    r"|w83[0-9]{3}[a-z]*(?:-[a-z])?)$")            # w83627ehf family
+    # f71882fg and w83627ehf: exactly the chip names those drivers report (read from the kernel modules);
+    # other Fintek/Winbond chips have their own drivers with different semantics and stay read-only
+    r"|f71808[ae]|f71858fg|f71862fg|f71868a|f71869a?|f71882fg|f71889(?:fg|ed|a)|f8000|f81768d|f81865f|f81866a"
+    r"|w83627(?:ehf|dhg|uhg)|w83667hg)$")
 IT87_SIV_RE = re.compile(r"^(it8\d{3})_[0-9a-fA-F]{8}$")   # some it87 builds append the chip's SIV
 BOARD_CHIP_RE = CONTROL_CHIP_RE                   # kept for older imports
 

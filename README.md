@@ -9,7 +9,9 @@
 ![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)
 ![Python](https://img.shields.io/badge/python-%E2%89%A53.10-3776ab)
 ![Platform](https://img.shields.io/badge/platform-Linux-1d99f3)
-![Tests](https://img.shields.io/badge/tests-216%20passing-27ae60)
+[![CI](https://github.com/grumpybollocks/fanpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/grumpybollocks/fanpilot/actions/workflows/ci.yml)
+
+**[⬇ Download FanPilot 1.0.1](https://github.com/grumpybollocks/fanpilot/releases/latest)** · [How to install](#download-and-install) · [Website](https://grumpybollocks.github.io/fanpilot/)
 
 <img src="docs/images/fans-curve.png" width="860" alt="FanPilot main window: CPU fan curve editor">
 
@@ -56,7 +58,7 @@ card's firmware whenever it stops, crashes or is killed. A fresh install changes
 | **Drag-and-drop curves** | Drag points, double-click to add, right-click to remove. A live marker shows where you are right now |
 | **Follow any sensor** | e.g. case fans follow *the hotter of CPU and GPU*, so they also help while the GPU is busy |
 | **Profiles** | Silent / Balanced / Performance built in, plus your own. One click in the app, the tray or the CLI |
-| **GPU curve in firmware** | AMD RX 7000 / 9000: the card stores the curve itself, so it keeps working even if FanPilot is stopped. Zero-RPM optional |
+| **GPU curve in firmware** | AMD RX 7000 / 9000: the card runs the curve itself (no polling); when FanPilot stops, the card goes back to its own control. Zero-RPM optional |
 | **Identify** | Runs one header slow for 3 s, then at full speed for 3 s, so you can see or hear which physical fan it is |
 | **Measure (calibration)** | Finds each fan's stop/start speed and suggests a safe minimum |
 | **Map my fans** | Finds which header drives which fan and hides headers with nothing connected |
@@ -98,41 +100,54 @@ you tell FanPilot which one the CPU fan is.
 
 **Laptops** (Dell, ThinkPad, ...) are read-only; use thinkfan or nbfc-linux for their fans.
 
-## Install
+## Download and install
 
-Needs Linux with systemd and Python 3.10 or newer; the app also needs PySide6.
+**Download FanPilot 1.0.1:** [latest release page](https://github.com/grumpybollocks/fanpilot/releases/latest) ·
+[.deb (Debian/Ubuntu)](https://github.com/grumpybollocks/fanpilot/releases/download/v1.0.1/fanpilot_1.0.1_all.deb) ·
+[.rpm (Fedora)](https://github.com/grumpybollocks/fanpilot/releases/download/v1.0.1/fanpilot-1.0.1-1.noarch.rpm) ·
+[source .tar.gz](https://github.com/grumpybollocks/fanpilot/archive/refs/tags/v1.0.1.tar.gz) ·
+[SHA256SUMS](https://github.com/grumpybollocks/fanpilot/releases/download/v1.0.1/SHA256SUMS)
 
-**Packages** (*after the first public release*, from the GitHub releases page):
+Needs Linux with systemd and Python 3.10 or newer; the desktop app also needs PySide6 (installed for you below).
 
-| Distribution | How |
-|---|---|
-| Arch, Manjaro, EndeavourOS | AUR package `fanpilot` (e.g. `yay -S fanpilot`), app: `sudo pacman -S pyside6` |
-| Debian 13+, Ubuntu 24.10+ | `sudo apt install ./fanpilot_<version>_all.deb` |
-| Fedora 43+ | `sudo dnf install ./fanpilot-<version>-1.noarch.rpm` |
-
-After a package install: `sudo usermod -aG fanpilot $USER` (log out and in), then
-`sudo systemctl enable --now fanpilotd`.
-
-**From source** (any distribution):
+### Debian 13+, Ubuntu 24.10+
 
 ```bash
+wget https://github.com/grumpybollocks/fanpilot/releases/download/v1.0.1/fanpilot_1.0.1_all.deb
+sudo apt install ./fanpilot_1.0.1_all.deb      # also installs PySide6 for the app
+sudo usermod -aG fanpilot $USER                # lets you change settings: log out and back in once
+sudo systemctl enable --now fanpilotd          # start the service now and at every boot
+```
+
+### Fedora 43+
+
+```bash
+sudo dnf install https://github.com/grumpybollocks/fanpilot/releases/download/v1.0.1/fanpilot-1.0.1-1.noarch.rpm
+sudo usermod -aG fanpilot $USER                # then log out and back in once
+sudo systemctl enable --now fanpilotd
+```
+
+### Arch, Manjaro, EndeavourOS — and any other distribution (from source)
+
+```bash
+sudo pacman -S --needed git python pyside6     # Arch family; elsewhere: git, python3 and your PySide6 package
 git clone https://github.com/grumpybollocks/fanpilot.git && cd fanpilot
-sudo ./install.sh --autostart      # app + service (+ tray icon at login); runs the test suite first
+sudo ./install.sh --autostart                  # runs the tests, installs, starts the service, tray icon at login
 ```
 
-Add `--gui-venv` on distributions without a PySide6 package (Ubuntu 24.04, Debian 12): it downloads PySide6
-into `/opt/fanpilot/venv`. Don't mix a package and the source installer.
+Ubuntu 24.04 and Debian 12 have no PySide6 package: use the source install with
+`sudo ./install.sh --gui-venv --autostart` (it downloads PySide6 into `/opt/fanpilot/venv`). The source installer
+gives your user the right to change settings itself. An AUR package is coming. Don't mix a package and the source
+installer.
 
-**Boards with an ITE chip** (most Gigabyte, some ASRock) usually need the `it87` driver set up:
+### No motherboard fans listed?
 
-```bash
-sudo scripts/install-driver.sh          # from a package: sudo fanpilot-install-driver
-scripts/install-driver.sh --dry-run     # see every step first, nothing is changed
-```
+Boards with an ITE chip (most Gigabyte, some ASRock) usually need the out-of-tree `it87` driver.
+`fanpilot-install-driver --dry-run` shows every step without changing anything; then run
+`sudo fanpilot-install-driver` (from the source folder: `sudo scripts/install-driver.sh`). Nuvoton boards
+normally work out of the box; the graphics card needs no driver helper.
 
-Boards with a Nuvoton chip normally work out of the box. The graphics card needs no driver helper.
-
-Full guide, per-distribution notes and the driver helper's details: **[docs/SETUP.md](docs/SETUP.md)**.
+Full guide, per-distribution notes and troubleshooting: **[docs/SETUP.md](docs/SETUP.md)**.
 
 ## First run
 
@@ -175,11 +190,11 @@ FanPilot treats "a fan stopped when it shouldn't have" as the worst possible bug
 | The service stops, crashes, hangs or is killed | every fan goes back to BIOS / GPU-firmware control (systemd `ExecStopPost` + watchdog), and systemd restarts the service |
 | A fan's temperature sensor fails 3 readings in a row (3 s at the default 1 s interval) | that fan goes to 100 % |
 | CPU ≥ 90 °C or GPU hotspot ≥ 100 °C (adjustable) | all motherboard fans go to 100 %, including fans on Automatic |
-| The CPU temperature fails 3 readings in a row | all motherboard fans go to 100 % until it reads again (an unreadable sensor never ends emergency mode) |
+| The CPU temperature fails 3 readings in a row | all fans, graphics card included, go to 100 % until it reads again (an unreadable sensor never ends emergency mode) |
 | The fan driver is reloaded or a sensor appears late at boot | FanPilot finds it again within 10 s |
 | Another tool (e.g. LACT, CoreCtrl) resets the GPU curve | FanPilot re-applies it within 30 s (up to 3 times an hour) and names the tool in the log |
 | FanPilot is updated while its window or tray icon is open | the app restarts itself as the new version (fan control is never interrupted) |
-| CPU fan | never below 20 %, never stopped |
+| CPU fan | never below 20 %, never stopped (only *Measure this fan* tests lower, watched, aborting at 80 °C) |
 | Other fans | never below 10 % unless you allow them to stop |
 | A fan stops spinning while being driven | desktop warning while the app or tray runs (the CPU fan's says *check it now*) |
 | The BIOS keeps taking a fan back | after 5 times in a minute FanPilot leaves that fan on Automatic and tells you |
@@ -190,7 +205,7 @@ FanPilot treats "a fan stopped when it shouldn't have" as the worst possible bug
 ### Verified on the reference machine
 
 The reference machine is a Gigabyte B550M AORUS ELITE (ITE IT8688E fan chip) with an AMD Radeon RX 9060 XT.
-The current version is 1.0.0 (the same code as 0.7.4); each result below lists the version it was measured with.
+The current version is 1.0.1; each result below lists the version it was measured with.
 The self-test repeats the core checks on any PC.
 
 | Check | Version | Result |
@@ -217,7 +232,7 @@ sudo ./uninstall.sh                     # source install; add --purge to delete 
 sudo scripts/install-driver.sh --undo   # the it87 driver setup, if you used it
 
 sudo fanpilot-install-driver --undo     # package install: undo the driver setup first, if you used it
-sudo pacman -R fanpilot                 # (apt: sudo apt remove fanpilot / dnf: sudo dnf remove fanpilot)
+sudo apt remove fanpilot                # or: sudo dnf remove fanpilot / sudo pacman -R fanpilot (package installs)
 ```
 
 ## Troubleshooting

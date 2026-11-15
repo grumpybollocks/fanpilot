@@ -22,6 +22,17 @@ for name in fanpilotd:daemon fanpilotctl:ctl fanpilot:gui; do
             echo 'except ImportError:  # no distro package: the private one made by "install.sh --gui-venv"'
             echo '    import glob'
             echo "    sys.path[1:1] = glob.glob(\"$lib/venv/lib/python3*/site-packages\")"
+            echo '    try:'
+            echo '        import PySide6  # noqa: F401,F811'
+            echo '    except ImportError:  # started from the menu, a traceback would be invisible: say it'
+            echo '        import shutil, subprocess'
+            echo '        msg = ("The FanPilot app needs PySide6 (Qt for Python), which is not installed. Install the "'
+            echo '               "PySide6 package of your distribution, or run the source installer with --gui-venv. "'
+            echo '               "Fan control keeps running in the service: fanpilotctl status")'
+            echo '        print(msg, file=sys.stderr)'
+            echo '        if shutil.which("notify-send"):'
+            echo '            subprocess.run(["notify-send", "-a", "FanPilot", "FanPilot", msg], check=False)'
+            echo '        sys.exit(1)'
         fi
         echo "from fanpilot.$mod import main"
         echo 'sys.exit(main())'

@@ -30,10 +30,10 @@ chip. Undo everything: `--undo`.
 
 | Distribution | How |
 |---|---|
-| Arch, Manjaro, EndeavourOS | AUR package `fanpilot` (e.g. `yay -S fanpilot`), app: `sudo pacman -S pyside6` (*after the first public release*) |
-| Debian 13+, Ubuntu 24.10+ | `sudo apt install ./fanpilot_<version>_all.deb` from the GitHub release (*after the first public release*) |
-| Fedora 43+ | `sudo dnf install ./fanpilot-<version>-1.noarch.rpm` from the GitHub release (*after the first public release*) |
-| Ubuntu 24.04, Debian 12, anything else | from the source folder: `sudo ./install.sh --gui-venv --autostart` |
+| Arch, Manjaro, EndeavourOS | AUR package coming soon; until then the source install below. App: `sudo pacman -S pyside6` |
+| Debian 13+, Ubuntu 24.10+ | `sudo apt install ./fanpilot_1.0.1_all.deb` from the [latest release](https://github.com/grumpybollocks/fanpilot/releases/latest) |
+| Fedora 43+ | `sudo dnf install ./fanpilot-1.0.1-1.noarch.rpm` from the [latest release](https://github.com/grumpybollocks/fanpilot/releases/latest) |
+| Ubuntu 24.04, Debian 12, anything else | from the source folder: `sudo ./install.sh --gui-venv --autostart` (the .deb installs there too, but those releases have no PySide6 package, so the app would not start) |
 
 After a **package** install: `sudo usermod -aG fanpilot $USER` (log out and in, so your user may change
 settings), then `sudo systemctl enable --now fanpilotd`.
@@ -145,7 +145,7 @@ FanPilot shows hints in the window, in `fanpilotctl status` and in the self-test
 1. `sudo sensors-detect` (package lm_sensors / lm-sensors) tells you which chip the board has and which
    driver it needs. Load that driver (`sudo modprobe nct6775`, `it87`...).
 2. **Gigabyte** (ITE IT8686E/IT8688E/IT8689E...): needs the out-of-tree it87 driver:
-   `sudo scripts/install-driver.sh`.
+   `sudo fanpilot-install-driver` (package) or `sudo scripts/install-driver.sh` (source folder).
 3. **MSI** with nct6683 in `fanpilotctl report`: that driver only reads fans; the out-of-tree
    [nct6687d](https://github.com/Fred78290/nct6687d) driver adds control.
 4. **"ACPI resource conflict"** in `sudo dmesg`: the board's firmware also uses the chip. For it87 there is
@@ -158,11 +158,11 @@ FanPilot shows hints in the window, in `fanpilotctl status` and in the self-test
 
 | Symptom | Fix |
 |---|---|
-| "Motherboard fans not found" | Run `scripts/install-driver.sh`; check `sudo dmesg \| grep it87` |
+| "Motherboard fans not found" | Run `sudo fanpilot-install-driver` (package) or `sudo scripts/install-driver.sh`; check `sudo dmesg \| grep it87` |
 | "View only" banner | Your user may not change settings: `sudo usermod -aG fanpilot $USER` and log out and in (packages), or re-run `sudo ./install.sh` (source install) |
 | Log says "control was taken back" | BIOS Smart Fan is fighting FanPilot. In BIOS → Smart Fan 5, set that header to *Manual* or *Full speed*, then let FanPilot control it |
 | GPU: "commit failed … firmware rejected the table" | `journalctl -k \| grep -i overdrive`; reboot if it mentions `OD_UNSUPPORTED_FEATURE` |
-| GPU fan controls missing | OverDrive must be on: `/etc/modprobe.d/99-amdgpu-overdrive.conf` with `ppfeaturemask=0xFFF7FFFF` |
+| GPU fan controls missing | OverDrive must be on: `options amdgpu ppfeaturemask=0xFFF7FFFF` in `/etc/modprobe.d/99-amdgpu-overdrive.conf`, then rebuild the initramfs (`sudo mkinitcpio -P` / `sudo update-initramfs -u` / `sudo dracut -f`) and reboot — or add `amdgpu.ppfeaturemask=0xFFF7FFFF` to the kernel command line |
 | "… has stopped (0 RPM)" warning | the fan is blocked, unplugged or broken; check it. The CPU fan warning is urgent |
 | Fans loud after suspend | FanPilot re-applies settings after resume within a second; check the Log tab |
 
@@ -171,8 +171,8 @@ FanPilot shows hints in the window, in `fanpilotctl status` and in the self-test
 Stopping the service hands every fan back to the BIOS / card first, on every route.
 
 ```bash
-sudo pacman -R fanpilot                  # AUR package   (apt: sudo apt remove fanpilot / dnf: sudo dnf remove fanpilot)
-sudo fanpilot-install-driver --undo      # the it87 driver setup, if you used it (before removing the package)
+sudo fanpilot-install-driver --undo      # first: the it87 driver setup, if you used it (the helper goes with the package)
+sudo apt remove fanpilot                 # package install (dnf: sudo dnf remove fanpilot / pacman: sudo pacman -R fanpilot)
 
 sudo ./uninstall.sh                      # source install; add --purge to delete /etc/fanpilot too
 sudo scripts/install-driver.sh --undo

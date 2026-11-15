@@ -196,6 +196,16 @@ Python < 3.12 the app aborts ("deallocating None"); measured per version in CI (
 call). install.sh --gui-venv and the `gui` extra now use PySide6 < 6.12 on Python < 3.12, and the app warns on
 that combination. An independent review of these fixes then found: a fan set to Automatic during a driver reload stayed in manual mode, and a service restart during the gap lost the saved BIOS mode (both fixed: a returning fan is recorded again with the BIOS mode at once, and the restore file keeps it across a restart); with the pages now scrolling, the mouse wheel changed presets, sliders and spin boxes while scrolling (they react to the wheel only after a click now); uninstall.sh --purge started a packaged service before deleting its config. 216 tests.
 
+### 1.0.1 (audit of the public 1.0.0)
+
+Two independent reviews of the published release: nothing blocked 1.0. Fixed, with tests that fail on 1.0.0
+(tests/test_release101.py): emergency mode left an RX 7000/9000 card's fan at its own setting (now 100 % too);
+the chip allow-list matched Fintek/Winbond chips that other drivers serve (now the exact lists from the
+f71882fg and w83627ehf modules); deeply nested JSON on the socket wrote a traceback to the journal; the CLI's
+self-test/map waits crashed when the service restarted; download links and install docs (a test keeps them in
+step with the version). Known limits, on the roadmap: with two GPUs only one hotspot counts for the emergency
+limit; a fan the BIOS left in manual mode (1) is handed back in automatic mode (2). 222 tests.
+
 Screenshots in the README are generated from the real GUI on the simulated machine:
 `QT_QPA_PLATFORM=offscreen python3 tests/screenshots.py docs/images`.
 

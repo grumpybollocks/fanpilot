@@ -916,7 +916,7 @@ class FanEditor(QWidget):
             self.curve.set_points(s["curve"], (float(t_lo), float(t_hi)), float(getattr(self, "gpu_duty", (20, 100))[0]),
                                   getattr(self, "gpu_points", 5))
             self.curve_note.setText("Uses the GPU hotspot temperature. The curve is stored in the card's "
-                                    "firmware (5 points), so it keeps working even if FanPilot stops.")
+                                    "firmware (5 points); when FanPilot stops, the card goes back to its own control.")
             self.zero_rpm.setChecked(bool(s["zero_rpm"]))
         else:
             self.curve.set_points(s["curve"], (20.0, 100.0), float(s["min_duty"]), 8)
@@ -1249,7 +1249,7 @@ class MainWindow(QMainWindow):
         pbtns.addStretch(1)
         pl.addLayout(pbtns)
         sl.addWidget(pbox)
-        cbox = QGroupBox("Emergency limits — above these, every motherboard fan runs at full speed")
+        cbox = QGroupBox("Emergency limits — above these, every fan runs at full speed (graphics card too)")
         cf = QHBoxLayout(cbox)                 # one row
         self.crit_cpu = QSpinBox()
         self.crit_cpu.setRange(70, 95)

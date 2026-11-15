@@ -23,6 +23,11 @@ jobs:
           tar -xzf "nfpm_${V}_Linux_x86_64.tar.gz" nfpm
       - run: packaging/build-packages.sh ./nfpm
       - run: cd dist && sha256sum * > SHA256SUMS
-      - run: gh release create "$GITHUB_REF_NAME" dist/* --title "FanPilot $GITHUB_REF_NAME" --generate-notes
+      - name: Release notes from CHANGELOG.md (the section of this version)
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          awk -v v="$v" '/^## /{p = index($0, "## " v " ") == 1 || $0 == "## " v} p' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "CHANGELOG.md has no section for $v"; exit 1; }
+      - run: gh release create "$GITHUB_REF_NAME" dist/* --title "FanPilot $GITHUB_REF_NAME" --notes-file notes.md
         env:
           GH_TOKEN: ${{ github.token }}

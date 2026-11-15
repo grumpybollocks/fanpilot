@@ -1,6 +1,6 @@
 # FanPilot roadmap: from "most desktops" to as universal as Linux allows
 
-Status 0.7.4: motherboard fans on the common Super I/O drivers (it87, nct6775 family, nct6687, f71882fg,
+Status 1.0.0: motherboard fans on the common Super I/O drivers (it87, nct6775 family, nct6687, f71882fg,
 w83627ehf), AMD RX 7000/9000 firmware curves, older AMD cards (beta), NVIDIA and laptops read-only; Arch,
 .deb, .rpm and source installs. Research behind this plan (2026-11, with sources): see the end of this page and
 docs/UNIVERSAL_RESEARCH.md.
@@ -39,8 +39,8 @@ EIO, write-only enable, slow writes).
 
 | # | Milestone | Contents | Effort | Risk | Tested without the hardware by |
 |---|---|---|---|---|---|
-| 1.0 | **Publish** | clean public repo, generic README/landing page, supported-hardware table generated from tests/reports, issue templates, CHANGELOG, GitHub Pages, v1.0.0 release, AUR | S | low | CI (tests, packages, container installs) |
-| 1.1 | **Safety parity** | stale-sensor policy per fan, stall detection (RPM 0 while duty > stop duty → raise floor, alarm), "someone else changed this fan" detection, conflict detection by systemd unit + process, disk temperatures (drivetemp/NVMe) as curve inputs, GNOME "no tray → install AppIndicator" hint | S–M | low | simulator with a third-party writer thread, stall model |
+| 1.0 ✔ | **Publish** (done, except AUR) | clean public repo, generic README/landing page, issue templates, CHANGELOG, GitHub Pages, v1.0.0 release with .deb/.rpm. Still open: AUR package, supported-hardware table generated from tests/reports | S | low | CI (tests, packages, container installs) |
+| 1.1 | **Safety parity** | stale-sensor policy per fan, automatic floor raise on a stall (the stall warning exists already), "someone else changed this fan" detection, conflict detection by systemd unit + process, disk temperatures (drivetemp/NVMe) as curve inputs, GNOME "no tray → install AppIndicator" hint | S–M | low | simulator with a third-party writer thread, stall model |
 | 1.2 | **Driver table + new desktop devices** | the refactor above; add gpd-fan, cros_ec_hwmon (Framework), oxpec, ayaneo-ec, nzxt-smart2, corsair-cpro, asus_rog_ryujin, arctic_fan_controller | M | low–medium | per-driver simulated trees; ExecStopPost full-speed test for `pwm-only` |
 | 1.3 | **Firmware curves** | generalise the amdgpu curve code: asus_custom_fan_curve (8 points, enable 1/2/3, userspace validation, profile change disables it → detect), nzxt-kraken3 (40 points, rate-limited) | M | medium | curve-validation property tests; simulated profile switch |
 | 1.4 | **Laptops, opt-in** | thinkpad_acpi with `fan_control=1` and `fan_watchdog` as dead-man switch; dell-smm (writes in a worker thread, ~500 ms stalls); hp-wmi Victus/OMEN (keep-alive); lenovo-wmi-other (target RPM, -EIO models); defer to nbfc-linux where it runs | M | medium | simulated trees with latency + error injection; `/proc/acpi/ibm/fan` model |
@@ -63,8 +63,8 @@ EIO, write-only enable, slow writes).
 1. A user runs `fanpilotctl report` and attaches it to an issue (template asks for it).
 2. The report becomes `tests/reports/<board>.json`; the simulator replays it; the board's names and channels
    go into `fanpilot/boards.py`.
-3. The supported-hardware table on the landing page is generated from tests/reports, so it can't claim more
-   than what is tested.
+3. Planned: the supported-hardware table on the landing page will be generated from tests/reports, so it can't
+   claim more than what is tested (today it is written by hand from the kernel documentation).
 4. Driver helper grows with the chips people report (today: ITE through frankcrawford/it87; next: nct6687d
    for MSI).
 
