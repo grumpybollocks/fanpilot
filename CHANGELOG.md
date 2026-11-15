@@ -1,6 +1,16 @@
 # Changelog
 
-## 1.0.1
+## Unreleased
+
+* **Sensors, any board with a Nuvoton chip (most ASUS, MSI, ASRock):** plain names for the chip's inputs, raw
+  name kept in brackets (`TSI0_TEMP` → *CPU (AMD TSI 0)*, `SYSTIN` → *Motherboard (SYSTIN)*, `CPUTIN` → *CPU
+  socket*, `AUXTINn`, `SMBUSMASTER n`, `PCH_*`), no more chip-name prefix.
+* **Voltages on boards not in the database:** the fixed-function pins of NCT6779 and later (CPU Vcore, AVSB,
+  +3.3V, +3.3V standby, CMOS battery), which the driver scales itself, with the +-10 % / low-battery alert.
+  Board-wired inputs (+12V, +5V, ...) still need the board database: raw values would mislead.
+* **More drivers:** RAM module temperatures (`jc42`, `spd5118`) in the Memory group; `drivetemp` drives and
+  Intel chipset (`pch_*`) sensors get plain names.
+
 
 * **Emergency mode covers the graphics card too:** above a CPU or GPU emergency limit, an AMD RX 7000/9000
   card's fan now also runs at full speed (before, only motherboard fans did); it returns to its setting after.

@@ -42,6 +42,39 @@ KNOWN_LABELS = {
     ("nvme", "Composite"): "NVMe SSD",
 }
 CPU_CHIPS = ("k10temp", "zenpower", "coretemp")
+
+# nct6775-family temperature inputs (the driver's own labels, the chip's pin and source names). Facts about
+# the chip, so they hold on every board that uses it; the raw name stays in brackets, since boards wire the
+# AUX inputs differently. Checked on a real NCT6798 (TSI0_TEMP = k10temp Tctl, SYSTIN/CPUTIN board values).
+NUVOTON_TEMP_LABELS = [
+    (r"SYSTIN", "Motherboard (SYSTIN)"),
+    (r"CPUTIN", "CPU socket (CPUTIN)"),
+    (r"AUXTIN(\d+)", r"Auxiliary \1 (AUXTIN\1)"),
+    (r"TSI0_TEMP", "CPU (AMD TSI 0)"),
+    (r"TSI(\d+)_TEMP", r"AMD TSI \1 (TSI\1_TEMP)"),
+    (r"PECI Agent (\d+)", r"PECI agent \1"),
+    (r"PECI Agent (\d+) Calibration", r"PECI agent \1 (calibration)"),
+    (r"SMBUSMASTER (\d+)", r"SMBus master \1 (SMBUSMASTER \1)"),
+    (r"PCH_CHIP_TEMP", "Chipset (PCH_CHIP_TEMP)"),
+    (r"PCH_CPU_TEMP", "CPU via chipset (PCH_CPU_TEMP)"),
+    (r"PCH_CHIP_CPU_MAX_TEMP", "CPU max via chipset (PCH_CHIP_CPU_MAX_TEMP)"),
+    (r"PCH_MCH_TEMP", "Memory controller via chipset (PCH_MCH_TEMP)"),
+    (r"PCH_DIM(\d)_TEMP", r"RAM module \1 via chipset (PCH_DIM\1_TEMP)"),
+]
+NUVOTON_RE = re.compile(r"^(nct6106|nct6116|nct6126|nct5585|nct67\d\d)$")
+# other drivers: a plain name for the group they belong to
+DRIVER_PRETTY = {"gigabyte_wmi": "Board (WMI)", "acpitz": "ACPI zone", "nvme": "NVMe SSD",
+                 "asusec": "Board (EC)", "asus_wmi_sensors": "Board (WMI)", "nouveau": "GPU",
+                 "i915": "GPU", "xe": "GPU", "radeon": "GPU", "jc42": "RAM module", "spd5118": "RAM module",
+                 "drivetemp": "Drive"}
+RAM_CHIPS = ("jc42", "spd5118")
+
+
+def nuvoton_label(raw: str) -> str | None:
+    for pat, rep in NUVOTON_TEMP_LABELS:
+        if re.fullmatch(pat, raw):
+            return re.sub(pat, rep, raw)
+    return None
 # headers that must never stop, from driver labels (nct6687 "CPU Fan" / "Pump Fan", ASUS "CPU_OPT",
 # "W_PUMP+", "AIO_PUMP"). Pumps are protected but do not tell us which fan is the CPU fan.
 CPU_LABEL_RE = re.compile(r"cpu", re.I)
@@ -355,10 +388,12 @@ def discover(root: str = "/") -> Hardware:
                     label = f"CPU core {raw_label[5:]}"
                 if label is None and base_name in ("k10temp", "zenpower") and raw_label.startswith("Tccd"):
                     label = f"CPU die (CCD{raw_label[4:]})"
+                if label is None and NUVOTON_RE.match(base_name) and raw_label:
+                    label = nuvoton_label(raw_label)
+                if label is None and base_name.startswith("pch_"):
+                    label = "Chipset (PCH)"           # Intel chipset thermal driver (pch_cannonlake, ...)
                 if label is None:
-                    pretty = {"gigabyte_wmi": "Board (WMI)", "acpitz": "ACPI zone", "nvme": "NVMe SSD",
-                              "asusec": "Board (EC)", "asus_wmi_sensors": "Board (WMI)", "nouveau": "GPU",
-                              "i915": "GPU", "xe": "GPU", "radeon": "GPU"}.get(base_name, base_name)
+                    pretty = DRIVER_PRETTY.get(base_name, base_name)
                     suffix = chip.split("@")[1] if "@" in chip else ""
                     label = f"{pretty}{' ' + suffix if suffix and base_name == 'nvme' else ''} " \
                             f"{raw_label or idx}".strip()
