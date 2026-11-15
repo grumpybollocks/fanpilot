@@ -198,6 +198,36 @@ class GuiReview3(Base):
         c.set_points([[80, 90], [40, 30]])
         self.assertEqual(c.points, [[40.0, 30.0], [80.0, 90.0]])
 
+    def test_gpu_curve_never_below_card_minimum(self):
+        """Real RX 9070 XT (2026-11-15): firmware accepts 30-100 %, but a point could be dragged to 6 % and the
+        graph kept showing 6 % while the card ran 30 %."""
+        from PySide6.QtCore import QPointF
+        from fanpilot.gui import CurveEditor, FanEditor
+        c = CurveEditor()
+        c.resize(400, 260)
+        c.set_points([[48, 6], [56, 42], [95, 100]], (25.0, 100.0), 30.0, 5, 30.0)
+        self.assertEqual(c.points[0], [48.0, 30.0], "loaded below the card's minimum: shown as what it runs")
+        c.drag = 0
+
+        class Ev:
+            def __init__(self, p):
+                self._p = p
+
+            def position(self):
+                return self._p
+        c.mouseMoveEvent(Ev(QPointF(c._to_px(48, 0).x(), c._plot().bottom())))   # drag to the floor
+        self.assertEqual(c.points[0][1], 30.0, "can't be dragged under the card's minimum")
+        # a motherboard curve keeps 0 % points (fan stop)
+        c.set_points([[30, 0], [80, 100]], (20.0, 100.0), 20.0, 8, 0.0)
+        self.assertEqual(c.points[0], [30.0, 0.0])
+        # fixed speed: the slider's minimum is the card's, not a guess
+        e = FanEditor()
+        e.gpu_duty = (30, 100)
+        e.load("amdgpu/fan1", {"mode": "fixed", "fixed": 20, "curve": [[48, 6], [95, 100]], "zero_rpm": False},
+               True, "Graphics card fan", force=True, header=False)
+        self.assertEqual(e.spin.minimum(), 30)
+        self.assertEqual(e.curve.points[0], [48.0, 30.0])
+
 
 if __name__ == "__main__":
     unittest.main()
