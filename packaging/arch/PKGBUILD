@@ -1,0 +1,37 @@
+# Maintainer: grumpybollocks <grumpybollocks@users.noreply.github.com>
+pkgname=fanpilot
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Safe fan control for Linux desktops: motherboard (hwmon) and graphics card fans, HWiNFO-style sensors"
+arch=('any')
+url="https://github.com/grumpybollocks/fanpilot"
+license=('GPL-3.0-or-later')
+depends=('python' 'systemd')
+optdepends=('pyside6: the desktop app (tray, curves, sensors)'
+            'lm_sensors: sensors-detect, to find the motherboard fan chip'
+            'dkms: the out-of-tree it87 driver some ITE boards need (fanpilot-install-driver)')
+install=fanpilot.install
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')   # replaced by the real checksum when the v$pkgver release exists (updpkgsums)
+
+# The code goes to /usr/lib/fanpilot with small launchers in /usr/bin, NOT into python3.X/site-packages:
+# a fan controller's restore step (ExecStopPost) must keep working after a Python update even if this
+# package was not rebuilt yet, or a crash could leave fans at their last speed.
+
+check() {
+    cd "$pkgname-$pkgver"
+    FANPILOT_NO_QT=1 QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -t .
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+    install -Dm644 fanpilot/*.py -t "$pkgdir/usr/lib/fanpilot/fanpilot"
+    bash packaging/make-launchers.sh /usr/lib/fanpilot "$pkgdir/usr/bin"
+    sed 's|@BINDIR@|/usr/bin|g' packaging/fanpilotd.service > fanpilotd.service
+    install -Dm644 fanpilotd.service "$pkgdir/usr/lib/systemd/system/fanpilotd.service"
+    install -Dm644 packaging/fanpilot.sysusers "$pkgdir/usr/lib/sysusers.d/fanpilot.conf"
+    install -Dm644 packaging/fanpilot.desktop "$pkgdir/usr/share/applications/fanpilot.desktop"
+    install -Dm644 packaging/fanpilot.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/fanpilot.svg"
+    install -Dm755 scripts/install-driver.sh "$pkgdir/usr/bin/fanpilot-install-driver"
+    install -Dm644 README.md docs/SETUP.md -t "$pkgdir/usr/share/doc/$pkgname"
+}

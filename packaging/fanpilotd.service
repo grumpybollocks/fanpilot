@@ -1,0 +1,33 @@
+[Unit]
+Description=FanPilot fan control daemon
+Documentation=https://github.com/grumpybollocks/fanpilot
+After=systemd-modules-load.service
+# if it keeps failing, stop retrying (the fans stay with the BIOS) instead of flapping forever
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=notify
+ExecStart=@BINDIR@/fanpilotd
+# Runs after every stop, including a crash or a watchdog kill: hands all fans back to BIOS/GPU firmware.
+ExecStopPost=@BINDIR@/fanpilotd --restore
+Restart=on-failure
+RestartSec=3
+WatchdogSec=15
+RuntimeDirectory=fanpilot
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+ConfigurationDirectory=fanpilot
+# hardening that does not get in the way of writing /sys
+ProtectSystem=full
+ReadWritePaths=-/etc/fanpilot
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=yes
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

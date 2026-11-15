@@ -1,0 +1,28 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version matches the tag
+        run: test "v$(python3 -c 'import fanpilot; print(fanpilot.__version__)')" = "$GITHUB_REF_NAME"
+      - run: QT_QPA_PLATFORM=offscreen FANPILOT_NO_QT=1 python3 -m unittest discover -s tests -t .
+      - name: nFPM (checksum-verified release)
+        run: |
+          V=2.49.0
+          curl -fsSLO "https://github.com/goreleaser/nfpm/releases/download/v$V/nfpm_${V}_Linux_x86_64.tar.gz"
+          curl -fsSLO "https://github.com/goreleaser/nfpm/releases/download/v$V/checksums.txt"
+          grep " nfpm_${V}_Linux_x86_64.tar.gz$" checksums.txt | sha256sum -c -
+          tar -xzf "nfpm_${V}_Linux_x86_64.tar.gz" nfpm
+      - run: packaging/build-packages.sh ./nfpm
+      - run: cd dist && sha256sum * > SHA256SUMS
+      - run: gh release create "$GITHUB_REF_NAME" dist/* --title "FanPilot $GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

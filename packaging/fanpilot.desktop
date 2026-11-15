@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=FanPilot
+GenericName=Fan Control
+Comment=Control the motherboard and graphics card fans
+Exec=fanpilot
+Icon=fanpilot
+Terminal=false
+Categories=System;Monitor;
+Keywords=fan;cooling;temperature;pwm;speed;
+StartupWMClass=fanpilot

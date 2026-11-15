@@ -1,0 +1,58 @@
+# .deb and .rpm for GitHub releases: packaging/build-packages.sh (nFPM, https://nfpm.goreleaser.com).
+# The package lives in /usr/lib/fanpilot (one package for every Python 3.10+), launchers in /usr/bin.
+name: fanpilot
+arch: all
+platform: linux
+version: ${FANPILOT_VERSION}
+section: utils
+priority: optional
+maintainer: grumpybollocks <grumpybollocks@users.noreply.github.com>
+description: |
+  Safe fan control for Linux desktops.
+  Motherboard fans (hwmon: ITE it87, Nuvoton nct6775/nct6687, Fintek, Winbond) and AMD graphics card
+  fans, with curves, profiles, a self-test and an HWiNFO-style sensors view. Every fan is handed back
+  to the BIOS / card on any exit.
+homepage: https://github.com/grumpybollocks/fanpilot
+license: GPL-3.0-or-later
+overrides:
+  deb:
+    depends: ["python3 (>= 3.10)", "systemd"]
+    recommends: ["python3-pyside6.qtwidgets", "python3-pyside6.qtnetwork"]
+    suggests: ["lm-sensors", "dkms"]
+  rpm:
+    depends: ["python3 >= 3.10", "systemd"]
+    recommends: ["python3-pyside6"]
+    suggests: ["lm_sensors", "dkms"]
+contents:
+  - src: ./build/pkg/lib/fanpilot/
+    dst: /usr/lib/fanpilot/fanpilot/
+  - src: ./build/pkg/bin/fanpilot
+    dst: /usr/bin/fanpilot
+    file_info: {mode: 0755}
+  - src: ./build/pkg/bin/fanpilotd
+    dst: /usr/bin/fanpilotd
+    file_info: {mode: 0755}
+  - src: ./build/pkg/bin/fanpilotctl
+    dst: /usr/bin/fanpilotctl
+    file_info: {mode: 0755}
+  - src: ./scripts/install-driver.sh
+    dst: /usr/bin/fanpilot-install-driver
+    file_info: {mode: 0755}
+  - src: ./build/pkg/fanpilotd.service
+    dst: /usr/lib/systemd/system/fanpilotd.service
+  - src: ./packaging/fanpilot.sysusers
+    dst: /usr/lib/sysusers.d/fanpilot.conf
+  - src: ./packaging/fanpilot.desktop
+    dst: /usr/share/applications/fanpilot.desktop
+  - src: ./packaging/fanpilot.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/fanpilot.svg
+  - src: ./README.md
+    dst: /usr/share/doc/fanpilot/README.md
+  - src: ./docs/SETUP.md
+    dst: /usr/share/doc/fanpilot/SETUP.md
+  - src: ./LICENSE
+    dst: /usr/share/doc/fanpilot/copyright
+scripts:
+  postinstall: ./packaging/nfpm/postinstall.sh
+  preremove: ./packaging/nfpm/preremove.sh
+  postremove: ./packaging/nfpm/postremove.sh

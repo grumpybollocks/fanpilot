@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <circle cx="32" cy="32" r="29" fill="#232629" stroke="#3daee9" stroke-width="3"/>
+  <g fill="#3daee9">
+    <path id="b" d="M32 32 C38 20 50 14 51 28 C46 30 39 31 32 32 Z"/>
+    <use href="#b" transform="rotate(120 32 32)"/>
+    <use href="#b" transform="rotate(240 32 32)"/>
+  </g>
+  <circle cx="32" cy="32" r="5" fill="#eff0f1"/>
+</svg>

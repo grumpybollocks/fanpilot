@@ -1,0 +1,964 @@
+{
+ "amdgpu_ppfeaturemask": "0xfff7ffff",
+ "cmdline": [],
+ "cpu": "AMD Ryzen 7 5800X3D 8-Core Processor",
+ "date": "2026-11-15",
+ "dmi": {
+  "bios_version": "F22d",
+  "board_name": "B550M AORUS ELITE",
+  "board_vendor": "Gigabyte Technology Co., Ltd.",
+  "board_version": "Default string",
+  "product_name": "B550M AORUS ELITE",
+  "sys_vendor": "Gigabyte Technology Co., Ltd."
+ },
+ "drm": [
+  {
+   "attrs": {
+    "device": "0x7590\n",
+    "gpu_busy_percent": "1\n",
+    "mem_info_vram_total": "17095983104\n",
+    "pp_features": "features high: 0x0498f59e low: 0x38fffcfb\nNo. Feature               Bit : State\n00. FW_DATA_READ         ( 0) : enabled\n01. DPM_GFXCLK           ( 1) : enabled\n02. DPM_GFX_POWER_OPTIMIZER ( 2) : disabled\n03. DPM_UCLK             ( 3) : enabled\n04. DPM_FCLK             ( 4) : enabled\n05. DPM_SOCCLK           ( 5) : enabled\n06. DPM_LINK             ( 6) : enabled\n07. DPM_DCN              ( 7) : enab",
+    "subsystem_device": "0x2429\n",
+    "subsystem_vendor": "0x1458\n",
+    "vendor": "0x1002\n"
+   },
+   "card": "card1",
+   "device": "0000:08:00.0",
+   "driver": "amdgpu",
+   "fan_ctrl": {
+    "acoustic_limit_rpm_threshold": {
+     "v": "OD_ACOUSTIC_LIMIT:\n3500\nOD_RANGE:\nACOUSTIC_LIMIT: 500 3500\n",
+     "w": true
+    },
+    "acoustic_target_rpm_threshold": {
+     "v": "OD_ACOUSTIC_TARGET:\n1700\nOD_RANGE:\nACOUSTIC_TARGET: 500 3500\n",
+     "w": true
+    },
+    "fan_curve": {
+     "v": "OD_FAN_CURVE:\n0: 45C 20%\n1: 60C 35%\n2: 69C 61%\n3: 81C 84%\n4: 95C 100%\nOD_RANGE:\nFAN_CURVE(hotspot temp): 25C 100C\nFAN_CURVE(fan speed): 20% 100%\n",
+     "w": true
+    },
+    "fan_minimum_pwm": {
+     "v": "FAN_MINIMUM_PWM:\n20\nOD_RANGE:\nMINIMUM_PWM: 20 100\n",
+     "w": true
+    },
+    "fan_target_temperature": {
+     "v": "FAN_TARGET_TEMPERATURE:\n75\nOD_RANGE:\nTARGET_TEMPERATURE: 25 110\n",
+     "w": true
+    },
+    "fan_zero_rpm_enable": {
+     "v": "FAN_ZERO_RPM_ENABLE:\n0\nOD_RANGE:\nZERO_RPM_ENABLE: 0 1\n",
+     "w": true
+    }
+   }
+  }
+ ],
+ "fanpilot_report": 1,
+ "hwmon": [
+  {
+   "attrs": {
+    "name": {
+     "v": "acpitz\n",
+     "w": false
+    },
+    "temp1_input": {
+     "v": "16800\n",
+     "w": false
+    },
+    "temp2_input": {
+     "v": "16800\n",
+     "w": false
+    }
+   },
+   "device": "thermal_zone0",
+   "dir": "hwmon0",
+   "driver": null
+  },
+  {
+   "attrs": {
+    "name": {
+     "v": "nvme\n",
+     "w": false
+    },
+    "temp1_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "temp1_crit": {
+     "v": "79850\n",
+     "w": false
+    },
+    "temp1_input": {
+     "v": "31850\n",
+     "w": false
+    },
+    "temp1_label": {
+     "v": "Composite\n",
+     "w": false
+    },
+    "temp1_max": {
+     "v": "74850\n",
+     "w": true
+    },
+    "temp1_min": {
+     "v": "-150\n",
+     "w": true
+    }
+   },
+   "device": "nvme0",
+   "dir": "hwmon1",
+   "driver": null
+  },
+  {
+   "attrs": {
+    "fan1_enable": {
+     "v": null,
+     "w": true
+    },
+    "fan1_input": {
+     "v": "646\n",
+     "w": false
+    },
+    "fan1_max": {
+     "v": "3500\n",
+     "w": false
+    },
+    "fan1_min": {
+     "v": "0\n",
+     "w": false
+    },
+    "fan1_target": {
+     "v": "646\n",
+     "w": true
+    },
+    "freq1_input": {
+     "v": "657000000\n",
+     "w": false
+    },
+    "freq1_label": {
+     "v": "sclk\n",
+     "w": false
+    },
+    "freq2_input": {
+     "v": "772000000\n",
+     "w": false
+    },
+    "freq2_label": {
+     "v": "mclk\n",
+     "w": false
+    },
+    "in0_input": {
+     "v": "498\n",
+     "w": false
+    },
+    "in0_label": {
+     "v": "vddgfx\n",
+     "w": false
+    },
+    "name": {
+     "v": "amdgpu\n",
+     "w": false
+    },
+    "power1_average": {
+     "v": "18000000\n",
+     "w": false
+    },
+    "power1_cap": {
+     "v": "182000000\n",
+     "w": true
+    },
+    "power1_cap_default": {
+     "v": "182000000\n",
+     "w": false
+    },
+    "power1_cap_max": {
+     "v": "200000000\n",
+     "w": false
+    },
+    "power1_cap_min": {
+     "v": "127000000\n",
+     "w": false
+    },
+    "power1_label": {
+     "v": "PPT\n",
+     "w": false
+    },
+    "pwm1": {
+     "v": "51\n",
+     "w": false
+    },
+    "pwm1_max": {
+     "v": "255\n",
+     "w": false
+    },
+    "pwm1_min": {
+     "v": "0\n",
+     "w": false
+    },
+    "temp1_crit": {
+     "v": "100000\n",
+     "w": false
+    },
+    "temp1_crit_hyst": {
+     "v": "-273150\n",
+     "w": false
+    },
+    "temp1_emergency": {
+     "v": "105000\n",
+     "w": false
+    },
+    "temp1_input": {
+     "v": "32000\n",
+     "w": false
+    },
+    "temp1_label": {
+     "v": "edge\n",
+     "w": false
+    },
+    "temp2_crit": {
+     "v": "110000\n",
+     "w": false
+    },
+    "temp2_crit_hyst": {
+     "v": "-273150\n",
+     "w": false
+    },
+    "temp2_emergency": {
+     "v": "115000\n",
+     "w": false
+    },
+    "temp2_input": {
+     "v": "34000\n",
+     "w": false
+    },
+    "temp2_label": {
+     "v": "junction\n",
+     "w": false
+    },
+    "temp3_crit": {
+     "v": "108000\n",
+     "w": false
+    },
+    "temp3_crit_hyst": {
+     "v": "-273150\n",
+     "w": false
+    },
+    "temp3_emergency": {
+     "v": "113000\n",
+     "w": false
+    },
+    "temp3_input": {
+     "v": "52000\n",
+     "w": false
+    },
+    "temp3_label": {
+     "v": "mem\n",
+     "w": false
+    }
+   },
+   "device": "0000:08:00.0",
+   "dir": "hwmon2",
+   "driver": "amdgpu"
+  },
+  {
+   "attrs": {
+    "name": {
+     "v": "k10temp\n",
+     "w": false
+    },
+    "temp1_input": {
+     "v": "69125\n",
+     "w": false
+    },
+    "temp1_label": {
+     "v": "Tctl\n",
+     "w": false
+    },
+    "temp3_input": {
+     "v": "68000\n",
+     "w": false
+    },
+    "temp3_label": {
+     "v": "Tccd1\n",
+     "w": false
+    }
+   },
+   "device": "0000:00:18.3",
+   "dir": "hwmon3",
+   "driver": "k10temp"
+  },
+  {
+   "attrs": {
+    "name": {
+     "v": "gigabyte_wmi\n",
+     "w": false
+    },
+    "temp1_input": {
+     "v": "28000\n",
+     "w": false
+    },
+    "temp2_input": {
+     "v": "38000\n",
+     "w": false
+    },
+    "temp3_input": {
+     "v": "69000\n",
+     "w": false
+    },
+    "temp4_input": {
+     "v": "22000\n",
+     "w": false
+    },
+    "temp5_input": {
+     "v": "43000\n",
+     "w": false
+    },
+    "temp6_input": {
+     "v": "37000\n",
+     "w": false
+    }
+   },
+   "device": "DEADBEEF-2001-0000-00A0-C90629100000-2",
+   "dir": "hwmon4",
+   "driver": "gigabyte-wmi"
+  },
+  {
+   "attrs": {
+    "name": {
+     "v": "iwlwifi_1\n",
+     "w": false
+    },
+    "temp1_input": {
+     "v": "38000\n",
+     "w": false
+    }
+   },
+   "device": "thermal_zone2",
+   "dir": "hwmon5",
+   "driver": null
+  },
+  {
+   "attrs": {
+    "name": {
+     "v": "hidpp_battery_0\n",
+     "w": false
+    }
+   },
+   "device": "hidpp_battery_0",
+   "dir": "hwmon6",
+   "driver": null
+  },
+  {
+   "attrs": {
+    "alarms": {
+     "v": "8388624\n",
+     "w": false
+    },
+    "fan1_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "fan1_beep": {
+     "v": "1\n",
+     "w": true
+    },
+    "fan1_input": {
+     "v": "1448\n",
+     "w": false
+    },
+    "fan1_min": {
+     "v": "10\n",
+     "w": true
+    },
+    "fan2_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "fan2_beep": {
+     "v": "1\n",
+     "w": false
+    },
+    "fan2_input": {
+     "v": "1173\n",
+     "w": false
+    },
+    "fan2_min": {
+     "v": "0\n",
+     "w": true
+    },
+    "fan3_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "fan3_beep": {
+     "v": "1\n",
+     "w": false
+    },
+    "fan3_input": {
+     "v": "1112\n",
+     "w": false
+    },
+    "fan3_min": {
+     "v": "0\n",
+     "w": true
+    },
+    "in0_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "in0_beep": {
+     "v": "0\n",
+     "w": true
+    },
+    "in0_input": {
+     "v": "1272\n",
+     "w": false
+    },
+    "in0_max": {
+     "v": "3060\n",
+     "w": true
+    },
+    "in0_min": {
+     "v": "0\n",
+     "w": true
+    },
+    "in1_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "in1_beep": {
+     "v": "0\n",
+     "w": false
+    },
+    "in1_input": {
+     "v": "2028\n",
+     "w": false
+    },
+    "in1_max": {
+     "v": "3060\n",
+     "w": true
+    },
+    "in1_min": {
+     "v": "0\n",
+     "w": true
+    },
+    "in2_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "in2_beep": {
+     "v": "0\n",
+     "w": false
+    },
+    "in2_input": {
+     "v": "2040\n",
+     "w": false
+    },
+    "in2_max": {
+     "v": "3060\n",
+     "w": true
+    },
+    "in2_min": {
+     "v": "0\n",
+     "w": true
+    },
+    "in3_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "in3_beep": {
+     "v": "0\n",
+     "w": false
+    },
+    "in3_input": {
+     "v": "2028\n",
+     "w": false
+    },
+    "in3_max": {
+     "v": "3060\n",
+     "w": true
+    },
+    "in3_min": {
+     "v": "0\n",
+     "w": true
+    },
+    "in4_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "in4_beep": {
+     "v": "0\n",
+     "w": false
+    },
+    "in4_input": {
+     "v": "996\n",
+     "w": false
+    },
+    "in4_max": {
+     "v": "3060\n",
+     "w": true
+    },
+    "in4_min": {
+     "v": "0\n",
+     "w": true
+    },
+    "in5_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "in5_beep": {
+     "v": "0\n",
+     "w": false
+    },
+    "in5_input": {
+     "v": "912\n",
+     "w": false
+    },
+    "in5_max": {
+     "v": "3060\n",
+     "w": true
+    },
+    "in5_min": {
+     "v": "0\n",
+     "w": true
+    },
+    "in6_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "in6_beep": {
+     "v": "0\n",
+     "w": false
+    },
+    "in6_input": {
+     "v": "1380\n",
+     "w": false
+    },
+    "in6_max": {
+     "v": "3060\n",
+     "w": true
+    },
+    "in6_min": {
+     "v": "0\n",
+     "w": true
+    },
+    "in7_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "in7_beep": {
+     "v": "0\n",
+     "w": false
+    },
+    "in7_input": {
+     "v": "3288\n",
+     "w": false
+    },
+    "in7_label": {
+     "v": "3VSB\n",
+     "w": false
+    },
+    "in7_max": {
+     "v": "6120\n",
+     "w": true
+    },
+    "in7_min": {
+     "v": "0\n",
+     "w": true
+    },
+    "in8_input": {
+     "v": "3000\n",
+     "w": false
+    },
+    "in8_label": {
+     "v": "Vbat\n",
+     "w": false
+    },
+    "intrusion0_alarm": {
+     "v": "1\n",
+     "w": true
+    },
+    "name": {
+     "v": "it8688_60030507\n",
+     "w": false
+    },
+    "pwm1": {
+     "v": "222\n",
+     "w": true
+    },
+    "pwm1_auto_channels_temp": {
+     "v": "3\n",
+     "w": true
+    },
+    "pwm1_auto_point1_temp": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm1_auto_point1_temp_hyst": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm1_auto_point2_temp": {
+     "v": "20000\n",
+     "w": true
+    },
+    "pwm1_auto_point3_temp": {
+     "v": "76000\n",
+     "w": true
+    },
+    "pwm1_auto_slope": {
+     "v": "28\n",
+     "w": true
+    },
+    "pwm1_auto_start": {
+     "v": "222\n",
+     "w": true
+    },
+    "pwm1_enable": {
+     "v": "1\n",
+     "w": true
+    },
+    "pwm1_freq": {
+     "v": "23437\n",
+     "w": true
+    },
+    "pwm2": {
+     "v": "255\n",
+     "w": true
+    },
+    "pwm2_auto_channels_temp": {
+     "v": "1\n",
+     "w": true
+    },
+    "pwm2_auto_point1_temp": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm2_auto_point1_temp_hyst": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm2_auto_point2_temp": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm2_auto_point3_temp": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm2_auto_slope": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm2_auto_start": {
+     "v": "255\n",
+     "w": true
+    },
+    "pwm2_enable": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm2_freq": {
+     "v": "23437\n",
+     "w": true
+    },
+    "pwm3": {
+     "v": "255\n",
+     "w": true
+    },
+    "pwm3_auto_channels_temp": {
+     "v": "1\n",
+     "w": true
+    },
+    "pwm3_auto_point1_temp": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm3_auto_point1_temp_hyst": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm3_auto_point2_temp": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm3_auto_point3_temp": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm3_auto_slope": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm3_auto_start": {
+     "v": "255\n",
+     "w": true
+    },
+    "pwm3_enable": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm3_freq": {
+     "v": "23437\n",
+     "w": false
+    },
+    "pwm4": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm4_auto_channels_temp": {
+     "v": "4\n",
+     "w": true
+    },
+    "pwm4_auto_point1_temp": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm4_auto_point1_temp_hyst": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm4_auto_point2_temp": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm4_auto_point3_temp": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm4_auto_slope": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm4_enable": {
+     "v": "2\n",
+     "w": true
+    },
+    "pwm4_freq": {
+     "v": "23437\n",
+     "w": false
+    },
+    "pwm5": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm5_auto_channels_temp": {
+     "v": "4\n",
+     "w": true
+    },
+    "pwm5_auto_point1_temp": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm5_auto_point1_temp_hyst": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm5_auto_point2_temp": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm5_auto_point3_temp": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm5_auto_slope": {
+     "v": "0\n",
+     "w": true
+    },
+    "pwm5_enable": {
+     "v": "2\n",
+     "w": true
+    },
+    "pwm5_freq": {
+     "v": "23437\n",
+     "w": false
+    },
+    "temp1_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "temp1_beep": {
+     "v": "1\n",
+     "w": true
+    },
+    "temp1_input": {
+     "v": "28000\n",
+     "w": false
+    },
+    "temp1_max": {
+     "v": "127000\n",
+     "w": true
+    },
+    "temp1_min": {
+     "v": "127000\n",
+     "w": true
+    },
+    "temp1_offset": {
+     "v": "0\n",
+     "w": true
+    },
+    "temp1_type": {
+     "v": "4\n",
+     "w": false
+    },
+    "temp2_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "temp2_beep": {
+     "v": "1\n",
+     "w": false
+    },
+    "temp2_input": {
+     "v": "38000\n",
+     "w": false
+    },
+    "temp2_max": {
+     "v": "127000\n",
+     "w": true
+    },
+    "temp2_min": {
+     "v": "127000\n",
+     "w": true
+    },
+    "temp2_offset": {
+     "v": "0\n",
+     "w": true
+    },
+    "temp2_type": {
+     "v": "4\n",
+     "w": false
+    },
+    "temp3_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "temp3_beep": {
+     "v": "1\n",
+     "w": false
+    },
+    "temp3_input": {
+     "v": "68000\n",
+     "w": false
+    },
+    "temp3_max": {
+     "v": "127000\n",
+     "w": true
+    },
+    "temp3_min": {
+     "v": "127000\n",
+     "w": true
+    },
+    "temp3_offset": {
+     "v": "0\n",
+     "w": true
+    },
+    "temp3_type": {
+     "v": "5\n",
+     "w": false
+    },
+    "temp4_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "temp4_beep": {
+     "v": "1\n",
+     "w": false
+    },
+    "temp4_input": {
+     "v": "23000\n",
+     "w": false
+    },
+    "temp4_max": {
+     "v": "127000\n",
+     "w": true
+    },
+    "temp4_min": {
+     "v": "0\n",
+     "w": true
+    },
+    "temp4_offset": {
+     "v": "0\n",
+     "w": true
+    },
+    "temp4_type": {
+     "v": "4\n",
+     "w": false
+    },
+    "temp5_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "temp5_beep": {
+     "v": "1\n",
+     "w": false
+    },
+    "temp5_input": {
+     "v": "43000\n",
+     "w": false
+    },
+    "temp5_max": {
+     "v": "-125000\n",
+     "w": true
+    },
+    "temp5_min": {
+     "v": "0\n",
+     "w": true
+    },
+    "temp5_offset": {
+     "v": "0\n",
+     "w": true
+    },
+    "temp5_type": {
+     "v": "4\n",
+     "w": false
+    },
+    "temp6_alarm": {
+     "v": "0\n",
+     "w": false
+    },
+    "temp6_beep": {
+     "v": "1\n",
+     "w": false
+    },
+    "temp6_input": {
+     "v": "37000\n",
+     "w": false
+    },
+    "temp6_max": {
+     "v": "127000\n",
+     "w": true
+    },
+    "temp6_min": {
+     "v": "127000\n",
+     "w": true
+    },
+    "temp6_offset": {
+     "v": "0\n",
+     "w": true
+    },
+    "temp6_type": {
+     "v": "4\n",
+     "w": false
+    }
+   },
+   "device": "it87.2624",
+   "dir": "hwmon7",
+   "driver": "it87"
+  }
+ ],
+ "kernel": "7.2.9-1-MANJARO",
+ "modules": [
+  "it87",
+  "gigabyte_wmi",
+  "k10temp",
+  "amdgpu"
+ ],
+ "platform": [
+  {
+   "hwmon": true,
+   "name": "it87.2624"
+  }
+ ]
+}

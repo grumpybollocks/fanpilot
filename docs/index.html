@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FanPilot — fan control for Linux</title>
+<meta name="description" content="Quiet, safe fan control for Linux desktops: motherboard fans and the graphics card in one simple app that follows your desktop theme.">
+<link rel="icon" href="images/fanpilot.svg" type="image/svg+xml">
+<style>
+:root {
+  --bg: #f6f7f9; --bg2: #ffffff; --text: #1d2125; --muted: #5b6470; --line: #dde1e6;
+  --accent: #1d99f3; --accent2: #f67400; --good: #27ae60; --bad: #da4453; --code: #eef1f4;
+  --shadow: 0 10px 30px rgba(20, 30, 40, .12);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141618; --bg2: #1d2023; --text: #eceff1; --muted: #a2abb5; --line: #30353a;
+    --code: #24282c; --shadow: 0 10px 30px rgba(0, 0, 0, .45);
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.6 "Noto Sans", "Segoe UI", system-ui, -apple-system, sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+nav { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+nav .wrap { display: flex; align-items: center; gap: 22px; height: 58px; }
+nav .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); }
+nav .brand img { width: 28px; height: 28px; }
+nav .links { margin-left: auto; display: flex; gap: 18px; flex-wrap: wrap; }
+nav .links a { color: var(--muted); font-size: 15px; }
+nav .links a:hover { color: var(--text); text-decoration: none; }
+header.hero { padding: 64px 0 36px; text-align: center; }
+.hero h1 { font-size: clamp(34px, 5vw, 54px); line-height: 1.1; margin: 14px 0 12px; letter-spacing: -.02em; }
+.hero h1 span { background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text;
+  background-clip: text; color: transparent; }
+.hero p.lead { font-size: 19px; color: var(--muted); max-width: 720px; margin: 0 auto 26px; }
+.badges { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 26px; }
+.badge { font-size: 13px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--bg2); color: var(--muted); }
+.badge b { color: var(--text); }
+.cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.btn { display: inline-block; padding: 11px 20px; border-radius: 10px; font-weight: 600;
+  border: 1px solid var(--line); background: var(--bg2); color: var(--text); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn:hover { text-decoration: none; filter: brightness(1.06); }
+.shot { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); box-shadow: var(--shadow); }
+.hero .shot { margin-top: 40px; }
+section { padding: 56px 0; border-top: 1px solid var(--line); }
+section h2 { font-size: 30px; margin: 0 0 8px; letter-spacing: -.01em; }
+section p.sub { color: var(--muted); margin: 0 0 30px; max-width: 760px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+.card { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 18px 18px 14px; }
+.card .ic { font-size: 24px; }
+.card h3 { margin: 6px 0 6px; font-size: 17px; }
+.card p { margin: 0; color: var(--muted); font-size: 15px; }
+.feature { display: grid; grid-template-columns: 1fr 1.25fr; gap: 36px; align-items: center; margin: 44px 0; }
+.feature.flip { grid-template-columns: 1.25fr 1fr; }
+.feature.flip .text { order: 2; }
+.feature h3 { font-size: 23px; margin: 0 0 8px; }
+.feature p, .feature li { color: var(--muted); }
+.feature ul { padding-left: 20px; margin: 10px 0 0; }
+table { width: 100%; border-collapse: collapse; background: var(--bg2); border: 1px solid var(--line);
+  border-radius: 12px; overflow: hidden; font-size: 15px; }
+th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: var(--code); font-weight: 600; }
+tr:last-child td { border-bottom: none; }
+td.ok { color: var(--good); font-weight: 600; white-space: nowrap; }
+pre { background: var(--code); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px;
+  overflow-x: auto; font: 14px/1.55 "JetBrains Mono", "Fira Code", ui-monospace, monospace; margin: 0; }
+pre .c { color: var(--muted); }
+.steps { counter-reset: s; display: grid; gap: 14px; }
+.step { display: grid; grid-template-columns: 38px 1fr; gap: 14px; align-items: start; }
+.step::before { counter-increment: s; content: counter(s); width: 38px; height: 38px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-weight: 700; display: grid; place-items: center; }
+.step h4 { margin: 6px 0 6px; }
+.step p { margin: 0 0 8px; color: var(--muted); }
+.flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.flow .box { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.flow .box b { display: block; margin-bottom: 4px; }
+.flow .box span { color: var(--muted); font-size: 14px; }
+details { background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin: 10px 0; }
+summary { cursor: pointer; font-weight: 600; }
+details p { color: var(--muted); margin: 10px 0 2px; }
+footer { padding: 34px 0 50px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; text-align: center; }
+@media (max-width: 820px) {
+  .feature, .feature.flip { grid-template-columns: 1fr; gap: 18px; }
+  .feature.flip .text { order: 0; }
+  nav .links { display: none; }
+  th:nth-child(3), td:nth-child(3) { display: none; }
+}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="#"><img src="images/fanpilot.svg" alt="">FanPilot</a>
+  <div class="links">
+    <a href="#features">Features</a><a href="#hardware">Hardware</a><a href="#install">Install</a>
+    <a href="#safety">Safety</a><a href="#verified">Verified</a><a href="#how">How it works</a><a href="#faq">FAQ</a>
+    <a href="https://github.com/grumpybollocks/fanpilot">GitHub</a>
+  </div>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <img src="images/fanpilot.svg" width="84" height="84" alt="FanPilot icon">
+  <h1>Quiet, safe <span>fan control</span><br>for your Linux desktop</h1>
+  <p class="lead">Motherboard fans <em>and</em> the graphics card in one simple app that follows your desktop theme.
+    Drag a curve, pick a profile, and FanPilot hands everything back to the BIOS if anything goes wrong.</p>
+  <div class="badges">
+    <span class="badge"><b>Linux</b> · systemd</span>
+    <span class="badge"><b>GPL-3.0</b>-or-later</span>
+    <span class="badge"><b>Python</b> ≥ 3.10</span>
+    <span class="badge"><b>216</b> automated tests</span>
+  </div>
+  <div class="cta">
+    <a class="btn primary" href="#install">Install</a>
+    <a class="btn" href="#hardware">Supported hardware</a>
+    <a class="btn" href="https://github.com/grumpybollocks/fanpilot">Source on GitHub</a>
+  </div>
+  <img class="shot" src="images/fans-curve.png" alt="FanPilot main window with the CPU fan curve editor" width="1060" height="760">
+</div></header>
+
+<section id="what"><div class="wrap">
+  <h2>What it is</h2>
+  <p class="sub">FanPilot is a fan controller for Linux desktops. A small root service (Python standard library only)
+    drives the motherboard's fan headers through the kernel's hwmon drivers and the graphics card's fan through its
+    own interface, and an ordinary desktop app with a tray icon lets you choose <b>Automatic</b>, a <b>fixed speed</b>
+    or a <b>temperature curve</b> for every fan. It names the headers the way the board does where it knows the board,
+    warns you when a fan stalls, and hands every fan back to the BIOS or the card's firmware whenever it stops,
+    crashes or is killed. A fresh install changes nothing: every fan starts on Automatic.</p>
+  <div class="grid">
+    <div class="card"><div class="ic">🔌</div><h3>Driver helper</h3><p>For boards with an ITE chip, one script sets up the <code>it87</code> driver (DKMS, rebuilt on kernel updates). Every step is printed and can be undone.</p></div>
+    <div class="card"><div class="ic">🏷️</div><h3>Real names</h3><p>On boards FanPilot knows: CPU_FAN, SYS_FAN1, ... instead of <code>pwm2</code> and <code>temp5</code>. Rename anything yourself.</p></div>
+    <div class="card"><div class="ic">🎮</div><h3>GPU too</h3><p>AMD RX 7000 / 9000: the fan curve is written into the card's own firmware.</p></div>
+    <div class="card"><div class="ic">🛟</div><h3>Fail-safe</h3><p>Starts on Automatic and changes nothing until you choose. Hands everything back on any failure.</p></div>
+  </div>
+</div></section>
+
+<section id="features"><div class="wrap">
+  <h2>Features</h2>
+  <p class="sub">Simple by default, detailed when you want it.</p>
+
+  <div class="feature">
+    <div class="text">
+      <h3>📈 Drag-and-drop fan curves</h3>
+      <p>Each fan can be <b>Automatic</b> (BIOS or card decides), a <b>fixed speed</b>, or a <b>temperature curve</b>.</p>
+      <ul>
+        <li>Drag points; double-click to add one, right-click to remove one</li>
+        <li>A live marker shows the current temperature and speed</li>
+        <li>Case fans can follow <b>the hotter of CPU and GPU</b>, so they also help while the GPU is busy</li>
+        <li>Fine tuning: lowest speed, allow stop, smoothing, ramp limits</li>
+      </ul>
+    </div>
+    <img class="shot" src="images/fans-curve-light.png" alt="Curve editor in the light theme" loading="lazy" width="1060" height="760">
+  </div>
+
+  <div class="feature flip">
+    <div class="text">
+      <h3>🎮 Graphics card curve in firmware</h3>
+      <p>For AMD RX 7000 / 9000 cards with OverDrive enabled, FanPilot writes your curve into the card itself. It keeps
+        working even if FanPilot is stopped, and <i>zero-RPM</i> (fan off when cool) is your choice.</p>
+      <ul>
+        <li>Follows the GPU hotspot temperature</li>
+        <li>Every write is read back and checked</li>
+        <li>Automatic hands control straight back to the card</li>
+      </ul>
+    </div>
+    <img class="shot" src="images/gpu.png" alt="Graphics card fan curve" loading="lazy" width="1060" height="760">
+  </div>
+
+  <div class="feature">
+    <div class="text">
+      <h3>🎛️ Profiles, limits and a one-click self-test</h3>
+      <p><b>Silent</b>, <b>Balanced</b> and <b>Performance</b> are built in, and you can save your own. Switch from the
+        top of the window, from the tray icon, or from the command line.</p>
+      <ul>
+        <li><b>Self-test button</b>: ✔/✖ for the chip, sensors, speed control, crash recovery and GPU curve (about 45 s, no password)</li>
+        <li>Emergency limits: above them every motherboard fan runs at full speed</li>
+        <li>Built-in profiles keep each fan's measured lowest speed</li>
+      </ul>
+    </div>
+    <img class="shot" src="images/settings.png" alt="Profiles, emergency limits and self-test results" loading="lazy" width="1060" height="760">
+  </div>
+
+  <div class="feature flip">
+    <div class="text">
+      <h3>📋 Every sensor, HWiNFO-style</h3>
+      <p>One table grouped by device: CPU, motherboard, graphics card and drives. Temperatures, voltages, clocks,
+        power, load and fans, each with Current, Minimum, Maximum and Average. Values past a limit turn red.
+        Reset, copy, export or log to CSV.</p>
+    </div>
+    <img class="shot" src="images/sensors.png" alt="HWiNFO-style sensors table" loading="lazy" width="1060" height="759">
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="ic">🔍</div><h3>Identify</h3><p>Runs one header slow for 3 s, then at full speed for 3 s, so you can see or hear which physical fan it is.</p></div>
+    <div class="card"><div class="ic">📏</div><h3>Calibration</h3><p>Measures where each fan stops and restarts, then never asks for less than that.</p></div>
+    <div class="card"><div class="ic">🗺️</div><h3>Map my fans</h3><p>Finds which header drives which fan and hides headers with nothing connected (about 15 s per header).</p></div>
+    <div class="card"><div class="ic">🚨</div><h3>Stall warning</h3><p>Desktop alert (while the app or tray runs) if a fan stops while it should spin.</p></div>
+    <div class="card"><div class="ic">🖥️</div><h3>Feels native</h3><p>Follows your desktop theme (light/dark), lives in the tray, and only one copy runs at a time.</p></div>
+    <div class="card"><div class="ic">🔔</div><h3>Your own alarms</h3><p>Right-click any sensor: get a desktop notification when it goes above or below your value.</p></div>
+    <div class="card"><div class="ic">🔢</div><h3>Value on the tray</h3><p>Right-click any sensor → <i>Show on tray icon</i>: that number sits in your panel.</p></div>
+    <div class="card"><div class="ic">📄</div><h3>Sensor file</h3><p><code>/run/fanpilot/sensors.tsv</code> (in RAM, rewritten once a second) for other programs, e.g. the <a href="https://github.com/grumpybollocks/Logitech-G510s-LCD-control">Logitech G510 keyboard LCD app</a>.</p></div>
+    <div class="card"><div class="ic">💾</div><h3>Backup &amp; restore</h3><p><code>fanpilotctl config &gt; my-fans.json</code> and <code>fanpilotctl import my-fans.json</code>.</p></div>
+  </div>
+</div></section>
+
+<section id="hardware"><div class="wrap">
+  <h2>Supported hardware</h2>
+  <p class="sub">FanPilot only writes to drivers it knows to be controllable. Everything else is shown read-only.</p>
+  <h3>Motherboard fan chips</h3>
+  <table>
+    <tr><th>Driver</th><th>Typical boards</th></tr>
+    <tr><td>ITE <code>it87</code> (in-tree, or the newer <a href="https://github.com/frankcrawford/it87">frankcrawford/it87</a>)</td><td>most Gigabyte, some ASRock and older boards</td></tr>
+    <tr><td>Nuvoton <code>nct6775</code> family</td><td>most ASUS, many MSI and ASRock boards</td></tr>
+    <tr><td>Nuvoton <code>nct6687</code> (<a href="https://github.com/Fred78290/nct6687d">nct6687d</a>, out-of-tree)</td><td>newer MSI boards</td></tr>
+    <tr><td>Fintek <code>f71882fg</code> family</td><td></td></tr>
+    <tr><td>Winbond <code>w83627ehf</code> family</td><td></td></tr>
+    <tr><td>Read-only: <code>nct6683</code>, <code>asus-ec-sensors</code>, <code>asus_wmi_sensors</code>, <code>gigabyte-wmi</code>, <code>hp-wmi-sensors</code>, any other chip</td><td>shown in the Sensors tab, never written to</td></tr>
+  </table>
+  <p class="sub" style="margin-top:14px">Boards FanPilot knows get the headers' printed names (CPU_FAN, SYS_FAN1, ...). Any other board works
+    generically ("Fan 1", "Fan 2", ...), and every motherboard fan gets the CPU fan's protection until you tell
+    FanPilot which one the CPU fan is.</p>
+  <h3>Graphics cards</h3>
+  <table>
+    <tr><th>Card</th><th>What FanPilot does</th></tr>
+    <tr><td>AMD RX 7000 / 9000 with OverDrive</td><td>Temperature curve stored in the card's firmware (5 points), zero-RPM optional</td></tr>
+    <tr><td>AMD RX 7000 / 9000 without OverDrive</td><td>Shown read-only, with a hint: add the OverDrive bit (0x4000) to the <code>amdgpu.ppfeaturemask</code> kernel parameter</td></tr>
+    <tr><td>AMD up to RX 6000</td><td><b>Beta:</b> controlled like a motherboard header; handed back to the card on every exit</td></tr>
+    <tr><td>NVIDIA (proprietary driver)</td><td>Read-only temperature and fan % through <code>nvidia-smi</code>; it also counts for the GPU emergency limit</td></tr>
+    <tr><td>NVIDIA nouveau, Intel</td><td>Read-only, as far as the kernel reports anything</td></tr>
+  </table>
+  <p class="sub" style="margin-top:14px"><b>Laptops</b> (Dell, ThinkPad, ...) are read-only; use thinkfan or nbfc-linux for their fans.</p>
+</div></section>
+
+<section id="install"><div class="wrap">
+  <h2>Install</h2>
+  <p class="sub">Linux with systemd and Python 3.10+; the app also needs PySide6. Each script prints what it does and can be undone.
+    Full guide: <a href="https://github.com/grumpybollocks/fanpilot/blob/main/docs/SETUP.md">docs/SETUP.md</a>.</p>
+  <div class="steps">
+    <div class="step"><div>
+      <h4>Packages (after the first public release)</h4>
+      <p>Arch, Manjaro, EndeavourOS: AUR package <code>fanpilot</code>, app: <code>sudo pacman -S pyside6</code>.
+        Debian 13+, Ubuntu 24.10+: the <code>.deb</code>; Fedora 43+: the <code>.rpm</code>, both from the GitHub releases page.</p>
+      <pre>sudo usermod -aG fanpilot $USER          <span class="c"># then log out and in</span>
+sudo systemctl enable --now fanpilotd</pre>
+    </div></div>
+    <div class="step"><div>
+      <h4>Or from source (any distribution)</h4>
+      <p>Runs the test suite first, then installs. Every fan starts on Automatic.</p>
+      <pre>git clone https://github.com/grumpybollocks/fanpilot.git &amp;&amp; cd fanpilot
+sudo ./install.sh --autostart      <span class="c"># tray icon at login; undo: sudo ./uninstall.sh</span></pre>
+      <p>No PySide6 package on your distribution (Ubuntu 24.04, Debian 12)? Add <code>--gui-venv</code>.</p>
+    </div></div>
+    <div class="step"><div>
+      <h4>Motherboard driver (ITE boards)</h4>
+      <p>Boards with an ITE chip (most Gigabyte, some ASRock) usually need the <code>it87</code> driver set up. Nuvoton boards
+        normally work out of the box; the graphics card needs nothing.</p>
+      <pre>sudo scripts/install-driver.sh          <span class="c"># from a package: sudo fanpilot-install-driver; undo: --undo</span>
+scripts/install-driver.sh --dry-run     <span class="c"># see every step first, nothing is changed</span></pre>
+    </div></div>
+    <div class="step"><div>
+      <h4>First run</h4>
+      <p>Open <b>FanPilot</b> from the app menu and check the <i>Sensors</i> tab. Optional: <b>Settings → Run self-test</b>
+        (about 45 s). Then <b>Identify</b> and <b>Measure</b> each system fan (on an unknown board, right-click the CPU fan →
+        <i>This is a CPU fan</i>), and pick a profile.</p>
+    </div></div>
+  </div>
+
+  <h3 style="margin-top:36px">Command line</h3>
+  <pre>fanpilotctl status                      <span class="c"># fans and temperatures</span>
+fanpilotctl sensors [-w]                <span class="c"># every reading (-w: refresh every second)</span>
+fanpilotctl config &gt; my-fans.json       <span class="c"># current config as JSON (backup)</span>
+fanpilotctl set &lt;fan&gt; auto|fixed|curve [value]
+fanpilotctl calibrate [&lt;fan&gt;] [--stop]  <span class="c"># measure stop/start speed</span>
+fanpilotctl events                      <span class="c"># recent events</span>
+fanpilotctl map [--stop] [--forget]     <span class="c"># which header drives which fan</span>
+fanpilotctl report                      <span class="c"># anonymised hardware report for bug reports</span>
+fanpilotctl rename &lt;id&gt; [name]
+fanpilotctl cpu-fan [&lt;fan&gt;...]
+fanpilotctl identify &lt;fan&gt;
+fanpilotctl profile list|apply|save|delete [name]
+fanpilotctl selftest                    <span class="c"># about 45 s</span>
+fanpilotctl import my-fans.json</pre>
+</div></section>
+
+<section id="safety"><div class="wrap">
+  <h2>Safety first</h2>
+  <p class="sub">FanPilot treats "a fan stopped when it shouldn't have" as the worst possible bug.</p>
+  <table>
+    <tr><th>Situation</th><th>What happens</th></tr>
+    <tr><td>The service stops, crashes, hangs or is killed</td><td>Every fan goes back to BIOS / GPU-firmware control (systemd restore step + watchdog), and systemd restarts the service</td></tr>
+    <tr><td>A fan's temperature sensor fails 3 readings in a row (3 s at the default 1 s interval)</td><td>That fan goes to 100 %</td></tr>
+    <tr><td>CPU ≥ 90 °C or GPU hotspot ≥ 100 °C (adjustable)</td><td>All motherboard fans go to 100 %, including fans on Automatic</td></tr>
+    <tr><td>The CPU temperature fails 3 readings in a row</td><td>All motherboard fans go to 100 % until it reads again</td></tr>
+    <tr><td>The fan driver is reloaded, or a sensor appears late at boot</td><td>Found again within 10 s</td></tr>
+    <tr><td>Another tool (e.g. LACT, CoreCtrl) resets the GPU curve</td><td>Re-applied within 30 s (up to 3 times an hour); the tool is named in the log</td></tr>
+    <tr><td>FanPilot is updated while its window or tray icon is open</td><td>The app restarts itself as the new version; fan control is never interrupted</td></tr>
+    <tr><td>CPU fan</td><td>Never below 20 %, never stopped</td></tr>
+    <tr><td>Other fans</td><td>Never below 10 %, or below the measured lowest working speed, unless you allow them to stop</td></tr>
+    <tr><td>A fan stops while it should spin</td><td>Desktop warning (while the app or tray runs)</td></tr>
+    <tr><td>The BIOS keeps taking a fan back</td><td>After 5 times in a minute FanPilot leaves that fan on Automatic and tells you</td></tr>
+    <tr><td>The GPU firmware rejects a curve</td><td>Retried after 60 s; after 3 failures the card keeps control</td></tr>
+    <tr><td>Invalid settings</td><td>Rejected; the old settings stay in force</td></tr>
+    <tr><td>Fresh install</td><td>Every fan starts on Automatic, so nothing changes until you choose</td></tr>
+  </table>
+</div></section>
+
+<section id="verified"><div class="wrap">
+  <h2>Verified on the reference machine</h2>
+  <p class="sub">Gigabyte B550M AORUS ELITE (ITE IT8688E fan chip) with an AMD Radeon RX 9060 XT. The current version is
+    1.0.0 (the same code as 0.7.4, whose self-test passed all 14 checks here); each result lists the version it was measured with. The self-test repeats the core checks on any PC.</p>
+  <table>
+    <tr><th>Check</th><th>Result</th><th>Version · notes</th></tr>
+    <tr><td>Fan chip</td><td class="ok">IT8688E</td><td>≤ 0.2.2 · the kernel's built-in driver can't run it; the DKMS driver was built on kernel 7.2.9</td></tr>
+    <tr><td>SYS_FAN1 speed control</td><td class="ok">964 / 632 / 391 RPM</td><td>≤ 0.2.2 · at 70 / 40 / 25 %; back to BIOS → 1157 RPM</td></tr>
+    <tr><td>Graphics card</td><td class="ok">1568 RPM at 35 %</td><td>≤ 0.2.2 · curve read back exactly from the firmware; no kernel errors</td></tr>
+    <tr><td>Driver quirk found</td><td class="ok">handled</td><td>0.2.0 · a manual fan at 100 % is reported as "full speed"; the PWM value is stale under BIOS control</td></tr>
+    <tr><td><code>scripts/selftest.sh</code> with <code>kill -9</code></td><td class="ok">12 / 12 passed</td><td>0.2.1 · speed control, hand-back, fan back to the BIOS after SIGKILL, service restarted by systemd, GPU curve</td></tr>
+    <tr><td>Silent profile</td><td class="ok">665 / 434 / 492 RPM</td><td>0.2.1 · CPU / SYS1 / SYS2, down from ~1200–1300 RPM under BIOS control</td></tr>
+    <tr><td>In-app self-test button</td><td class="ok">14 / 14 passed</td><td>0.3.0 · chip, sensors, speed control, hand-back to BIOS, crash recovery, GPU curve</td></tr>
+    <tr><td>Sensors view</td><td class="ok">39 readings</td><td>0.4.0 · no false red values; every <code>pwm*_enable</code> unchanged</td></tr>
+  </table>
+</div></section>
+
+<section id="how"><div class="wrap">
+  <h2>How it works</h2>
+  <p class="sub">A small background service does the work; the app is just a window onto it.</p>
+  <div class="flow">
+    <div class="box"><b>FanPilot app / fanpilotctl</b><span>Your user. PySide6 window and tray. Talks to the service over a local socket; only allowed users may change settings.</span></div>
+    <div class="box"><b>fanpilotd</b><span>Root service (systemd), Python standard library only. Control loop (1 s by default), curves, profiles, safety rules.</span></div>
+    <div class="box"><b>Motherboard</b><span>The board's fan chip through its hwmon driver (it87, nct6775, nct6687, ...): PWM headers and board temperatures.</span></div>
+    <div class="box"><b>Graphics card</b><span>AMD RX 7000 / 9000: firmware fan curve (<code>gpu_od/fan_ctrl</code>), all points staged, then one commit. Older AMD: pwm1 (beta).</span></div>
+    <div class="box"><b>systemd</b><span>Watchdog and a restore step after every stop, including crashes, so fans always return to the BIOS.</span></div>
+  </div>
+  <p class="sub" style="margin-top:24px">Everything is tested against a simulated sysfs tree that also emulates the GPU firmware's
+    stage/commit rules: 216 tests, including real GUI widgets driven offscreen.</p>
+</div></section>
+
+<section id="faq"><div class="wrap">
+  <h2>FAQ</h2>
+  <details><summary>Will it make my PC run hotter?</summary>
+    <p>Only if you choose a quieter curve. The emergency limits still force every motherboard fan to full speed above
+      90 °C (CPU) or 100 °C (GPU hotspot), and a fan whose sensor can't be read goes to 100 %.</p></details>
+  <details><summary>What happens if I uninstall it, or it crashes?</summary>
+    <p>Every fan goes back to exactly what the BIOS and the graphics card do without FanPilot. The self-test checks this.
+      Uninstall: <code>sudo ./uninstall.sh</code> (add <code>--purge</code> to delete <code>/etc/fanpilot</code>) and
+      <code>sudo scripts/install-driver.sh --undo</code> if you used the driver helper; packages are removed with your
+      package manager.</p></details>
+  <details><summary>Does it work on other boards?</summary>
+    <p>Yes, on any desktop whose motherboard fan chip has a Linux driver that allows control: ITE <code>it87</code>
+      (many Gigabyte, ASRock and older boards), the Nuvoton <code>nct6775</code> family (most ASUS and many MSI, ASRock
+      boards), Nuvoton <code>nct6687</code> (newer MSI boards, out-of-tree driver), Fintek <code>f71882fg</code> and
+      Winbond <code>w83627ehf</code>. Other chips are shown read-only, never written to. Boards FanPilot knows get the
+      headers' real names; any other board works generically, and every fan gets the CPU fan's protection until you
+      mark the CPU fan (right-click it → <i>This is a CPU fan</i>).</p></details>
+  <details><summary>My motherboard fans are missing</summary>
+    <p>FanPilot shows hints in the window, in <code>fanpilotctl status</code> and in the self-test. See
+      <a href="https://github.com/grumpybollocks/fanpilot/blob/main/docs/SETUP.md#my-motherboard-fans-are-missing">My motherboard fans are missing</a>
+      and <a href="https://github.com/grumpybollocks/fanpilot/blob/main/docs/SETUP.md#troubleshooting">Troubleshooting</a>.</p></details>
+  <details><summary>My fans got louder after suspend</summary>
+    <p>FanPilot re-applies your settings within a second after resume; the Log tab shows it.</p></details>
+  <details><summary>How do I report a bug?</summary>
+    <p>Attach <code>fanpilotctl report &gt; my-pc.json</code>: it is anonymised, needs no root, and becomes a test machine
+      for the fix. See <a href="https://github.com/grumpybollocks/fanpilot/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.</p></details>
+  <details><summary>What's next?</summary>
+    <p>See the <a href="https://github.com/grumpybollocks/fanpilot/blob/main/docs/ROADMAP.md">roadmap</a>.</p></details>
+</div></section>
+
+<footer><div class="wrap">
+  FanPilot is licensed under the <a href="https://github.com/grumpybollocks/fanpilot/blob/main/LICENSE">GNU GPL v3.0 or later</a> ·
+  <a href="https://github.com/grumpybollocks/fanpilot/blob/main/docs/SETUP.md">Setup guide</a> ·
+  <a href="https://github.com/grumpybollocks/fanpilot/blob/main/docs/ROADMAP.md">Roadmap</a><br>
+  it87 driver by <a href="https://github.com/frankcrawford/it87">frankcrawford/it87</a> (GPL-2.0, not bundled) ·
+  RDNA fan-curve rules from the <a href="https://docs.kernel.org/gpu/amdgpu/thermal.html">kernel docs</a> and
+  <a href="https://gitlab.com/coolercontrol/coolercontrol">CoolerControl</a> · calibration inspired by
+  <a href="https://github.com/markusressel/fan2go">fan2go</a>
+</div></footer>
+
+</body>
+</html>

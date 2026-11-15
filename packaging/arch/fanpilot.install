@@ -1,0 +1,32 @@
+source_install_warning() {
+    if [ -e /etc/systemd/system/fanpilotd.service ] || [ -d /opt/fanpilot ]; then
+        echo ">>> !! FanPilot from the source installer is also present (/opt/fanpilot, /etc/systemd/system)."
+        echo ">>>    Its service file overrides this package's. Remove it, keeping your settings:"
+        echo ">>>    sudo ./uninstall.sh  (from the source folder), then: sudo systemctl daemon-reload"
+    fi
+}
+
+post_install() {
+    source_install_warning
+    echo ">>> FanPilot: every fan starts on Automatic (BIOS / graphics card), nothing changes until you choose."
+    echo ">>> 1. Let your user change settings:  sudo usermod -aG fanpilot \$USER   (then log out and in)"
+    echo ">>> 2. Start the service:              sudo systemctl enable --now fanpilotd"
+    echo ">>> 3. Open 'FanPilot' from the menu (needs pyside6). No motherboard fans? See /usr/share/doc/fanpilot/SETUP.md"
+}
+
+post_upgrade() {
+    source_install_warning
+    # the systemd hook reloads units only after the whole transaction: reload now, so the restart uses the new unit
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    systemctl try-restart fanpilotd.service >/dev/null 2>&1 || true
+}
+
+pre_remove() {
+    # stopping hands every fan back to the BIOS / card first (ExecStopPost)
+    systemctl disable --now fanpilotd.service >/dev/null 2>&1 || true
+}
+
+post_remove() {
+    rm -rf /usr/lib/fanpilot/fanpilot/__pycache__
+    rmdir /usr/lib/fanpilot/fanpilot /usr/lib/fanpilot 2>/dev/null || true
+}

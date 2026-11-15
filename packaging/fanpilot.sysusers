@@ -1,0 +1,2 @@
+# FanPilot: members may change fan settings (sudo usermod -aG fanpilot $USER)
+g fanpilot - -
