@@ -21,6 +21,9 @@ configs, it87 configs): FanPilot is GPL-3.0-or-later.
 
 ## Code
 
+Read `docs/LESSONS_LEARNT.md` first: mistakes already made once, and the rule each one taught. Claude Code users
+get the same as the `fanpilot-dev` skill (`.claude/skills/`).
+
 * The service (`fanpilot/daemon.py` and what it imports) uses only Python's standard library and runs as
   root: keep it that way. The app (`fanpilot/gui.py`) uses PySide6.
 * Every fan must go back to the BIOS / card on any exit, and FanPilot never writes to a driver it doesn't
