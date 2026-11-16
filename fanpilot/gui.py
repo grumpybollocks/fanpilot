@@ -949,7 +949,9 @@ class FanEditor(QWidget):
         self.zero_rpm.setVisible(is_gpu)
         self.source_label.setVisible(not is_gpu)
         self.source_btn.setVisible(not is_gpu)
-        self.cal_box.setVisible(not is_gpu and header)   # measure/identify: motherboard headers only
+        # measure: motherboard headers and RX 7000/9000 cards; identify / 'use as lowest': headers only
+        self.cal_box.setVisible((not is_gpu and header) or is_gpu)
+        self.id_btn.setVisible(not is_gpu)
         if is_gpu:
             self._update_minimums()
         self.spin.setValue(int(round(s["fixed"])))
@@ -1092,6 +1094,21 @@ class FanEditor(QWidget):
 
     def show_calibration(self, result):
         self.cal_result = result
+        if self.is_gpu:
+            self.cal_use.setVisible(False)
+            if not result:
+                self.cal_text.setText("Measure the lowest speed this card's fan really runs at (about 1½ minutes; "
+                                      "FanPilot holds it at 100 %, 90 %, … down to the card's minimum and stops "
+                                      "if the card gets hot).")
+                return
+            table = ", ".join(f"{d} % = {r} RPM" for d, r in result.get("table", []))
+            txt = (f"Lowest speed the card allows: <b>{result.get('min_duty')} % = {result.get('min_rpm')} RPM</b> "
+                   f"(full speed {result.get('max_rpm')} RPM).")
+            eff = result.get("effective_min_duty")
+            if eff is not None and eff != result.get("min_duty"):
+                txt += f" Below {eff} % the fan doesn't get any slower, so points under {eff} % make no difference."
+            self.cal_text.setText(txt + f"<br><small>{table}</small>")
+            return
         if not result:
             self.cal_text.setText("Measure the fan to find the lowest speed at which it keeps spinning "
                                   "(takes about 1–2 minutes; FanPilot steps the fan down and stops if the CPU gets hot).")
@@ -1583,6 +1600,10 @@ class MainWindow(QMainWindow):
             return
         if self._polling:
             return          # the last request is still waiting on a stuck service: don't pile up more
+        # in the tray (window hidden, no CSV log running) every 3 s is plenty for the icon and alarms
+        want = 1000 if self.isVisible() or self.sensors_view._log else 3000
+        if self.timer.interval() != want:
+            self.timer.setInterval(want)
         self._ticks = getattr(self, "_ticks", 0) + 1
         self._polling = True
         self._poll_sent = time.monotonic()
@@ -1862,7 +1883,13 @@ class MainWindow(QMainWindow):
 
     def _calibrate(self, fan_id):
         label = next((f["label"] for f in self.status["fans"] if f["id"] == fan_id), fan_id)
+        gpu = next((f.get("kind") == "gpu" for f in self.status["fans"] if f["id"] == fan_id), False)
         ok = QMessageBox.question(
+            self, "Measure fan",
+            f"FanPilot will hold <b>{label}</b> at 100 %, 90 %, … down to the lowest speed the card allows, "
+            "about 10 seconds each, to find the slowest it really runs.<br><br>Leave the PC idle for about "
+            "1½ minutes (no games). The test stops by itself if the card reaches 85 °C; afterwards the fan "
+            "goes back to its setting.<br><br>Start now?") if gpu else QMessageBox.question(
             self, "Measure fan",
             f"FanPilot will slowly lower <b>{label}</b> from full speed and may stop it for a few "
             "seconds to find its lowest working speed.<br><br>Leave the PC idle for about two minutes. "
@@ -2173,6 +2200,12 @@ class MainWindow(QMainWindow):
         if self._poller:
             self._poller.stop()
         QApplication.quit()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        if getattr(self, "timer", None) is not None and self.timer.interval() != 1000:
+            self.timer.setInterval(1000)         # opened from the tray: back to every second at once
+            QTimer.singleShot(0, self._tick)
 
     def closeEvent(self, e):
         self._save_geometry()

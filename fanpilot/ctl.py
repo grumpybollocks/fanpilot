@@ -48,7 +48,7 @@ def main(argv=None) -> int:
     s.add_argument("fan", help="fan id, e.g. it8688/pwm2 or amdgpu/fan1")
     s.add_argument("mode", choices=["auto", "fixed", "curve"])
     s.add_argument("value", nargs="?", help="percent for fixed, or curve as 40:30,60:45,80:100")
-    c = sub.add_parser("calibrate", help="measure a motherboard fan's stop/start speed")
+    c = sub.add_parser("calibrate", help="measure a motherboard fan's stop/start speed, or a graphics card fan's lowest speed")
     c.add_argument("fan", nargs="?")
     c.add_argument("--stop", action="store_true", help="stop a running measurement")
     sub.add_parser("events", help="show recent events")
@@ -76,7 +76,7 @@ def main(argv=None) -> int:
     cl = Client(a.socket)
     try:
         if a.cmd == "status":
-            st = cl.call("status")["status"]
+            st = cl.call("status", readings=False)["status"]
             print(f"FanPilot {st['version']}  board chip: {st['board_chip'] or 'not found'}"
                   f"  profile: {st.get('active_profile') or 'custom'}"
                   f"{'  ** CRITICAL **' if st['critical'] else ''}")
@@ -122,7 +122,7 @@ def main(argv=None) -> int:
             print(f"slow for {half:g} s, then full speed for {half:g} s")
         elif a.cmd == "profile":
             if a.action == "list":
-                st = cl.call("status")["status"]
+                st = cl.call("status", readings=False)["status"]
                 for n in st["profiles"]:
                     print(("* " if n == st.get("active_profile") else "  ") + n)
             else:
@@ -138,7 +138,7 @@ def main(argv=None) -> int:
             try:
                 while True:
                     time.sleep(1)
-                    st = cl.call("status")["status"]["selftest"]
+                    st = cl.call("status", readings=False)["status"]["selftest"]
                     if not st:                         # the service restarted: the test was stopped
                         print("stopped: the service restarted; fans are back to their settings")
                         return 1
@@ -173,7 +173,7 @@ def main(argv=None) -> int:
             try:
                 while True:
                     time.sleep(2)
-                    mpi = cl.call("status")["status"]["mapping"]
+                    mpi = cl.call("status", readings=False)["status"]["mapping"]
                     if not mpi:                        # the service restarted: mapping was stopped
                         print("stopped: the service restarted; fans are back to their settings")
                         return 1
@@ -191,7 +191,7 @@ def main(argv=None) -> int:
         elif a.cmd == "cpu-fan":
             if a.fans:
                 cl.call("set_cpu_fans", fans=a.fans)
-            st = cl.call("status")["status"]
+            st = cl.call("status", readings=False)["status"]
             if "cpu_protected" not in st:
                 print(f"the running service is FanPilot {st.get('version')}: update it to use this")
                 return 1
@@ -202,7 +202,7 @@ def main(argv=None) -> int:
                       "Mark it with: fanpilotctl cpu-fan <fan id>")
         elif a.cmd == "events":
             import time
-            for e in cl.call("status")["status"]["events"]:
+            for e in cl.call("status", readings=False)["status"]["events"]:
                 print(time.strftime("%H:%M:%S", time.localtime(e["t"])), e["level"].upper(), e["msg"])
     except DaemonError as e:
         print(f"error: {e}", file=sys.stderr)

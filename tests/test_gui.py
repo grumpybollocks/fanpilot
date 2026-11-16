@@ -159,7 +159,9 @@ class GuiTests(Base):
         ed = w.editor
         self.assertTrue(ed.is_gpu)
         self.assertEqual(ed.curve.max_points, 5)
-        self.assertFalse(ed.cal_box.isVisibleTo(w))
+        # an RX 7000/9000 card can be measured (lowest speed), but has nothing to Identify
+        self.assertTrue(ed.cal_box.isVisibleTo(w))
+        self.assertFalse(ed.id_btn.isVisibleTo(w))
         ed.rb_curve.setChecked(True)
         ed.apply_btn.click()
         self.assertTrue(self.wait_for(lambda: self.gpu.commits == 1))

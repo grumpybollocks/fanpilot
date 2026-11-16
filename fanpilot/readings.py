@@ -10,9 +10,16 @@ from __future__ import annotations
 import os
 import re
 
-from .hw import GPU_FAN_ID, BoardFan
+from .hw import GPU_FAN_ID, RAM_CHIPS, BoardFan
 
 
+# Nuvoton NCT6779 and later: inputs with a fixed function and internal scaling (the chip's pins CPUVCORE,
+# AVSB, 3VCC, 3VSB, VBAT), so their readings are true voltages on every board. VIN* pins go through each
+# board's own resistors and stay hidden unless the board database knows them. {in: (label, nominal, low_only)}
+NUVOTON_FIXED_RE = re.compile(r"^nct(6779|679\d)$")
+NUVOTON_FIXED_VOLTS = {0: ("CPU Vcore", None, False), 2: ("AVSB (+3.3V)", 3.3, False),
+                       3: ("+3.3V (3VCC)", 3.3, False), 7: ("+3.3V standby (3VSB)", 3.3, False),
+                       8: ("CMOS battery (VBAT)", 3.0, True)}
 GPU_GROUP_CHIPS = ("amdgpu", "nvidia", "nouveau", "i915", "xe", "radeon")
 
 
@@ -201,6 +208,17 @@ class Readings:
                 used_sensors.add(sid)
         # voltages only where the board database knows the dividers (raw values would mislead)
         board = self.hw.board
+        if board is None:
+            # unknown board: only the pins whose meaning and scaling the chip itself fixes
+            for chip in self.hw.board_chips:
+                pins = NUVOTON_FIXED_VOLTS if NUVOTON_FIXED_RE.match(self.hw.names.get(chip, chip)) else {}
+                for n, (label, nominal, low_only) in pins.items():
+                    v = _num(os.path.join(self.hw.chips[chip], f"in{n}_input"))
+                    v = None if v is None or v <= 0 else v / 1000
+                    if v is None:
+                        continue                   # pin not wired / not reported on this board
+                    alert = nominal is not None and ((nominal - v) if low_only else abs(v - nominal)) > 0.1 * nominal
+                    add("board", f"v:{chip}/in{n}", label, "volt", v, alert)
         bchip = next((c for c in self.hw.board_chips if board and c.split("@")[0] in board["match"]["chip"]), None)
         if board and bchip:
             bdir = self.hw.chips[bchip]
@@ -266,7 +284,11 @@ class Readings:
                         "temp", v, v is not None and limit is not None and v >= limit)
                     used_sensors.add(sid)
 
-        # Memory
+        # Memory (RAM module temperature sensors, when their driver is loaded)
+        for sid, s in self.hw.sensors.items():
+            if sid.split("/")[0].split("@")[0] in RAM_CHIPS:
+                add("memory", "t:" + sid, s.label, "temp", temps.get(sid))
+                used_sensors.add(sid)
         mi = _read(self._p("proc/meminfo")) or ""
         tot = re.search(r"^MemTotal:\s+(\d+)", mi, re.M)
         avail = re.search(r"^MemAvailable:\s+(\d+)", mi, re.M)

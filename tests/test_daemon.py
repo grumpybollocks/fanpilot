@@ -199,6 +199,59 @@ class GpuDaemonTests(Base):
 
 
 class CalibrationTests(Base):
+    def _gpu_hwmon(self, d):
+        return d.hw.fans["amdgpu/fan1"].hwmon_dir
+
+    def _gpu_physics(self, d, floor=30):
+        """The fan follows the committed flat curve, but this firmware never goes slower than `floor` %
+        although it advertises 20 % (what the measurement has to discover)."""
+        duty = self.gpu.committed[0][1] if self.gpu.committed else 40
+        with open(os.path.join(self._gpu_hwmon(d), "fan1_input"), "w") as f:
+            f.write(f"{int(400 + 30 * max(duty, floor))}\n")
+
+    def test_gpu_lowest_speed(self):
+        """Second real machine (2026-11-15): the user asked what the graphics card fan's real minimum is."""
+        d = self.daemon({"fans": {"amdgpu/fan1": {"mode": "curve", "curve": [[40, 30], [80, 80]], "zero_rpm": True}},
+                         "allowed_uids": [0]})
+        self.ticks(d, 2)
+        before = list(self.gpu.committed)
+        self.assertTrue(d.handle({"cmd": "calibrate", "fan": "amdgpu/fan1"}, 0)["ok"])
+        self.assertFalse(d.handle({"cmd": "selftest"}, 0)["ok"], "nothing else runs meanwhile")
+        seen, commits = set(), self.gpu.commits
+        for _ in range(400):
+            self._gpu_physics(d)
+            self.ticks(d)
+            if self.gpu.committed and self.gpu.commits > commits and d.calibration.state == "running":
+                seen.add(self.gpu.committed[0][1])
+                self.assertEqual(len({dd for _, dd in self.gpu.committed}), 1, "a flat curve while measuring")
+            if d.calibration.state != "running":
+                break
+        self.assertEqual(d.calibration.state, "done", d.calibration.message)
+        res = d.cfg["calibration"]["amdgpu/fan1"]
+        self.assertEqual([r[0] for r in res["table"]], [100, 90, 80, 70, 60, 50, 40, 30, 20])
+        self.assertEqual(res["min_duty"], 20)
+        self.assertEqual(res["min_rpm"], 400 + 30 * 30)
+        self.assertEqual(res["effective_min_duty"], 30, "below 30 % this card doesn't get slower")
+        self.assertEqual(res["max_rpm"], 3400)
+        self.assertEqual(self.gpu.committed, before, "the user's own curve is back on the card")
+
+    def test_gpu_measurement_stops_when_hot(self):
+        d = self.daemon({"allowed_uids": [0]})                # GPU on Automatic
+        self.ticks(d, 2)
+        self.assertTrue(d.handle({"cmd": "calibrate", "fan": "amdgpu/fan1"}, 0)["ok"])
+        for _ in range(15):
+            self._gpu_physics(d)
+            self.ticks(d)
+        self.assertEqual(d.calibration.state, "running")
+        hot = d.own_sensor("amdgpu/fan1")
+        self.m.set_temp(os.path.dirname(d.hw.sensors[hot].path), int(hot.rsplit("temp", 1)[1]), 88)
+        self.ticks(d, 2)
+        self.assertEqual(d.calibration.state, "aborted", "within a second, not at the next 10 s step")
+        self.assertIn("graphics card at 88", d.calibration.message)
+        self.ticks(d, 2)
+        self.assertIsNone(self.gpu.committed, "on Automatic: handed back to the card's own control")
+        self.assertNotIn("amdgpu/fan1", d.cfg.get("calibration", {}))
+
     def test_finds_stop_and_start(self):
         d = self.daemon()
         resp = d.handle({"cmd": "calibrate", "fan": "it8688/pwm2"}, 0)

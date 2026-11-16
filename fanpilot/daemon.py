@@ -35,7 +35,13 @@ RECLAIM_LIMIT = 5         # [S6] reclaims within RECLAIM_WINDOW -> give up, back
 RECLAIM_WINDOW = 60.0
 GPU_VERIFY_EVERY = 30.0
 RESCAN_EVERY = 10.0       # look again for hardware that is missing (late driver, module reload)
+# Drive temperatures: every read is a real command to the drive (NVMe: a SMART log page, measured 0.6-7 ms
+# each; SATA drivetemp: an SCT/SMART command). They change over minutes, so they are read every 10 s and the
+# last value is reused in between. CPU/GPU/board sensors are plain register reads and stay every tick.
+SLOW_SENSOR_CHIPS = ("nvme", "drivetemp")
+SLOW_SENSOR_EVERY = 10.0
 CAL_ABORT_CPU = 80.0      # calibration aborts above this CPU temperature
+GPU_CAL_ABORT = 85.0      # graphics card measurement aborts at this hotspot temperature
 GPU_RETRY_AFTER = 60.0    # back-off after the GPU firmware rejected a curve
 GPU_MAX_FAILS = 3         # then give the GPU fan back to the card
 TICK_FAIL_LIMIT = 3       # consecutive broken ticks -> restore + exit so systemd restarts us
@@ -320,6 +326,79 @@ class Calibration:
                 "table": self.table, "result": self.result}
 
 
+class GpuCalibration:
+    """Finds the lowest speed an RX 7000/9000 card's fan really runs at: a flat firmware curve at 100, 90, ...
+    down to the card's own minimum (OD_RANGE), zero-RPM off, the RPM read after each step settles. Shares
+    the 'calibration' slot with Calibration, so the self-test, mapping and a second measurement are refused
+    while it runs. Stops early if the card or CPU gets hot; afterwards the card gets its setting back."""
+    SETTLE = 10              # the firmware ramps the fan over several seconds
+
+    def __init__(self, fan: GpuFan, apply_flat, gpu_temp):
+        self.fan = fan
+        self.state = "running"
+        self.message = "Full speed"
+        self.progress = 0.0
+        self.table: list[list[float]] = []
+        self.result: dict | None = None
+        self.next_at = 0.0
+        self.duty = 100.0
+        self._apply_flat = apply_flat         # duty -> writes the flat curve (records the restore entry)
+        self._gpu_temp = gpu_temp             # () -> °C or None
+        self._gen = self._steps()
+
+    def _steps(self):
+        info = amdgpu.read_info(self.fan.fan_ctrl_dir)
+        dmin, dmax = info.duty_range
+        duties = sorted({dmax, *range(dmax - dmax % 10, dmin, -10), dmin}, reverse=True)
+        for i, d in enumerate(duties):
+            self.duty = float(d)
+            self.message = f"Testing {d} %"
+            self.progress = 0.05 + 0.9 * i / len(duties)
+            self._apply_flat(d)
+            yield self.SETTLE
+            rpm = self.fan.rpm() or 0
+            if d == dmax and rpm <= 0:
+                self.abort("No speed reading at full speed: the card reports no fan speed")
+                return
+            self.table.append([d, rpm])
+        max_rpm, (low_duty, low_rpm) = self.table[0][1], self.table[-1]
+        # where lowering the setting stopped slowing the fan (firmware floor above the advertised minimum)
+        effective = low_duty
+        for (d_hi, r_hi), (d_lo, r_lo) in zip(self.table, self.table[1:]):
+            if r_hi > 0 and r_lo >= r_hi * 0.97:
+                effective = d_hi
+                break
+        self.result = {"kind": "gpu", "max_rpm": max_rpm, "min_duty": low_duty, "min_rpm": low_rpm,
+                       "effective_min_duty": effective, "table": self.table, "time": int(time.time())}
+        self.progress = 1.0
+        self.state = "done"
+        self.message = "Finished"
+
+    def tick(self, now: float) -> None:
+        if self.state != "running":
+            return
+        t = self._gpu_temp()                  # every tick, not only between steps
+        if t is not None and t >= GPU_CAL_ABORT:
+            self.abort(f"Stopped: graphics card at {t:.0f} °C")
+            return
+        if now < self.next_at:
+            return
+        try:
+            self.next_at = now + next(self._gen)
+        except StopIteration:
+            pass
+
+    def abort(self, why: str) -> None:
+        if self.state == "running":
+            self.state = "aborted"
+            self.message = why
+
+    def info(self) -> dict:
+        return {"fan": self.fan.id, "state": self.state, "message": self.message,
+                "progress": round(self.progress, 2), "duty": self.duty,
+                "table": self.table, "result": self.result}
+
+
 # --------------------------------------------------------------------------- daemon
 
 class Daemon:
@@ -334,7 +413,10 @@ class Daemon:
         self.events: collections.deque = collections.deque(maxlen=200)
         self.hw = discover(root)
         self.readings_src = Readings(root, self.hw)   # HWiNFO-style Sensors view
-        self.readings: list = []
+        self._readings: list = []
+        self._readings_tick = -1        # the Sensors view list is built only when someone asks for it
+        self._tick_no = 0
+        self._slow_next = 0.0
         try:
             self.cfg = cfgmod.load(config_path, self.protect_cpu)
         except (cfgmod.ConfigError, ValueError) as e:
@@ -348,6 +430,7 @@ class Daemon:
         self.disabled: dict[str, str] = {}
         self.fan_status: dict[str, dict] = {}
         self.temps: dict[str, float | None] = {}
+        self.gpu_now: dict[str, tuple] = {}     # graphics card fan (rpm, pwm), read with its temperatures
         self.critical = False
         self.gpu: dict[str, GpuState] = collections.defaultdict(GpuState)
         self.nvidia = nvidia.NvidiaSmi() if root == "/" else None   # tests inject a fake
@@ -532,7 +615,27 @@ class Daemon:
         for job, flag in ((self.selftest, "testing"), (self.mapping, "mapping")):
             if job and job.state == "running" and fid in job.busy:
                 return flag
+        cal = self.calibration
+        if isinstance(cal, GpuCalibration) and cal.state == "running" and cal.fan.id == fid:
+            return "calibrating"
         return None
+
+    @property
+    def readings(self) -> list[dict]:
+        """Every reading for the Sensors view, built at most once per tick and only when asked (the app's
+        Sensors tab, renaming): nobody watching means no work. A failure here never touches fan control."""
+        if self._readings_tick != self._tick_no:
+            self._readings_tick = self._tick_no
+            try:
+                crit = dict(self.cfg["critical"], cpu_sensor=self.crit_sensor("cpu"),
+                            gpu_sensor=self.crit_sensor("gpu"))
+                self._readings = self.readings_src.read(self.temps, self.fan_status, crit)
+            except Exception as e:  # noqa: BLE001 -- display only
+                self._readings = []     # never show an old snapshot as current
+                if not getattr(self, "_readings_warned", False):
+                    self._readings_warned = True
+                    self.event("warn", f"Some sensor readings are unavailable: {e}")
+        return self._readings
 
     def _named_readings(self) -> list[dict]:
         names = self.cfg.get("names", {})
@@ -552,7 +655,23 @@ class Daemon:
 
     # -- control ----------------------------------------------------------------
     def read_temps(self) -> None:
-        self.temps = {sid: s.read() for sid, s in self.hw.sensors.items()}
+        now = time.monotonic()
+        slow_due = now >= self._slow_next
+        if slow_due:
+            self._slow_next = now + SLOW_SENSOR_EVERY
+        old, new = self.temps, {}
+        # graphics card values last and in one burst: amdgpu fetches them from the card's firmware (about
+        # 1 ms of kernel time, measured on an RX 9070 XT) and keeps them only ~1 ms, so reads spread over the
+        # tick would each pay for a new fetch
+        gpu_chips = {f.hwmon_dir for f in self.hw.fans.values() if isinstance(f, GpuFan)}
+        order = sorted(self.hw.sensors.items(), key=lambda kv: os.path.dirname(kv[1].path or "") in gpu_chips)
+        for sid, s in order:
+            if not slow_due and sid in old and sid.split("/")[0].split("@")[0] in SLOW_SENSOR_CHIPS:
+                new[sid] = old[sid]
+            else:
+                new[sid] = s.read()
+        self.temps = new
+        self.gpu_now = {f.id: (f.rpm(), f.pwm()) for f in self.hw.fans.values() if isinstance(f, GpuFan)}
 
     def check_critical(self) -> None:
         c = self.cfg["critical"]
@@ -598,8 +717,10 @@ class Daemon:
             self.fan_status[fid] = st
             self.next_rescan = 0.0          # driver reloaded / hwmon renumbered: find it again
             return
-        p = fan.pwm()
         en = fan.enable()
+        # the duty register only when it means something (manual): on nct6798 a pwm read costs 0.35 ms of
+        # kernel time (measured), and under BIOS control the value would be thrown away anyway
+        p = fan.pwm() if en == 1 else None
         # under BIOS control the pwm register is stale (verified on the reference machine): don't report it as a duty
         # mode 0 = full speed (also how it87 shows a manual fan at 255)
         st["duty"] = 100.0 if en == 0 else round(pwm_to_duty(p), 1) if p is not None and en == 1 else None
@@ -767,11 +888,11 @@ class Daemon:
             return
         fid, g = fan.id, self.gpu[fan.id]
         temp = self.temps.get(self.own_sensor(fid) or "")
+        rpm, p = self.gpu_now.get(fid) or (fan.rpm(), fan.pwm())    # read with the card's temperatures
         if self.busy_with(fid):
-            p = fan.pwm()
             self.fan_status[fid] = {
                 "id": fid, "label": fan.label, "kind": "gpu", "control": "pmfw", "mode": self.fan_cfg(fid)["mode"],
-                "rpm": fan.rpm(), "duty": round(pwm_to_duty(p), 1) if p is not None else None,
+                "rpm": rpm, "duty": round(pwm_to_duty(p), 1) if p is not None else None,
                 "target": None, "temp": temp, "flags": [self.busy_with(fid)]}
             return
         fc = self.fan_cfg(fid)
@@ -779,10 +900,9 @@ class Daemon:
             # emergency (CPU or GPU too hot): the graphics card fan runs at full speed too, whatever its
             # setting; when it ends, the normal path below re-applies the setting or hands it back
             fc = {**fc, "mode": "fixed", "fixed": 100.0}
-        p = fan.pwm()
         self.fan_status[fid] = {
             "id": fid, "label": fan.label, "kind": "gpu", "control": "pmfw", "mode": self.fan_cfg(fid)["mode"],
-            "rpm": fan.rpm(), "duty": round(pwm_to_duty(p), 1) if p is not None else None,
+            "rpm": rpm, "duty": round(pwm_to_duty(p), 1) if p is not None else None,
             "target": None, "temp": temp, "flags": (["error"] if g.error else []) + (["critical"] if self.critical else []),
             "error": g.error,
         }
@@ -923,6 +1043,9 @@ class Daemon:
                     self.event("info", f"Calibration of {cal.fan.label} finished: {cal.result}")
             if cal.state != "running":
                 self.states[cal.fan.id].reset()
+                if isinstance(cal, GpuCalibration):
+                    self.gpu[cal.fan.id].applied = None      # the setting goes back on the card now
+                    self.control_gpu(now, cal.fan, force=True)
         st = self.selftest
         if st and st.state == "running":
             try:
@@ -964,15 +1087,7 @@ class Daemon:
             except Exception as e:  # one fan's bug must not skip the others
                 log.exception("controlling %s failed", fan.id)
                 broken.append(f"{fan.label}: {e}")
-        try:
-            # every reading for the Sensors view; a failure here never touches fan control
-            crit = dict(self.cfg["critical"], cpu_sensor=self.crit_sensor("cpu"), gpu_sensor=self.crit_sensor("gpu"))
-            self.readings = self.readings_src.read(self.temps, self.fan_status, crit)
-        except Exception as e:      # noqa: BLE001 -- display only
-            self.readings = []      # never show an old snapshot as current
-            if not getattr(self, "_readings_warned", False):
-                self._readings_warned = True
-                self.event("warn", f"Some sensor readings are unavailable: {e}")
+        self._tick_no += 1            # the Sensors view list is now stale; built on the next request
         try:
             # snapshot for other programs (G510 LCD); tmpfs, so no disk writes
             export.write(os.path.join(self.run_dir, "sensors.tsv"), self.hw, self.temps, self.fan_status,
@@ -1074,7 +1189,7 @@ class Daemon:
             g.applied = None
 
     # -- API --------------------------------------------------------------------
-    def status(self) -> dict:
+    def status(self, readings: bool = True) -> dict:
         sensors = [{"id": sid, "label": self.label(sid, s.label), "value": self.temps.get(sid)}
                    for sid, s in self.hw.sensors.items()]
         fans = []
@@ -1095,8 +1210,8 @@ class Daemon:
             "events": list(self.events)[-50:],
             "disabled": dict(self.disabled),
             "active_profile": self.cfg.get("active_profile"),
-            "readings": self._named_readings(),
-            "groups": self.readings_src.group_list(self.readings),
+            "readings": self._named_readings() if readings else [],
+            "groups": self.readings_src.group_list(self.readings) if readings else [],
             "profiles": list(presets.BUILTIN_PROFILES) + sorted(self.cfg.get("profiles", {})),
             "cpu_sensor": self.crit_sensor("cpu"),
             "gpu_sensor": self.crit_sensor("gpu"),
@@ -1161,7 +1276,9 @@ class Daemon:
             if cmd == "hello":
                 return {"ok": True, "version": __version__, "can_write": writable}
             if cmd == "status":
-                return {"ok": True, "status": self.status(), "can_write": writable}
+                # the app hidden in the tray asks without the Sensors view list (readings: false)
+                return {"ok": True, "status": self.status(req.get("readings", True) is not False),
+                        "can_write": writable}
             if cmd == "get_config":
                 return {"ok": True, "config": self.cfg}
             if not writable:
@@ -1247,8 +1364,9 @@ class Daemon:
                 if cmd == "calibrate":
                     fid = req.get("fan")
                     fan = self.hw.fans.get(fid)
-                    if not isinstance(fan, BoardFan) or fan.kind != "board":
-                        return {"ok": False, "error": "only motherboard fans can be calibrated"}
+                    if not (isinstance(fan, GpuFan) or (isinstance(fan, BoardFan) and fan.kind == "board")):
+                        return {"ok": False, "error": "only motherboard fans and RX 7000/9000 graphics card "
+                                                      "fans can be measured"}
                     if self.calibration and self.calibration.state == "running":
                         return {"ok": False, "error": "a calibration is already running"}
                     if self.selftest and self.selftest.state == "running":
@@ -1257,6 +1375,18 @@ class Daemon:
                         return {"ok": False, "error": "fans are being mapped"}
                     if self.critical:
                         return {"ok": False, "error": "temperatures are critical"}
+                    if isinstance(fan, GpuFan):
+                        if fid in self.disabled:
+                            return {"ok": False, "error": "the card rejected FanPilot's curves earlier"}
+
+                        def flat(d, fan=fan):
+                            self._gpu_restore(fan.fan_ctrl_dir, True)      # recorded before the write
+                            info = amdgpu.read_info(fan.fan_ctrl_dir)
+                            amdgpu.apply(fan.fan_ctrl_dir, amdgpu.flat_points(info, d), False)
+                        self.calibration = GpuCalibration(
+                            fan, flat, lambda fid=fid: self.temps.get(self.own_sensor(fid) or ""))
+                        self.event("info", f"Measuring {fan.label}'s lowest speed")
+                        return {"ok": True}
                     self._take(fan)
                     fan.set_enable(1)
                     fan.set_pwm(255)       # not whatever stale value the BIOS left in the register

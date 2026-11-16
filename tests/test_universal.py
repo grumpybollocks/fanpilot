@@ -63,7 +63,7 @@ class AsusNuvoton(Machine):
         # impossible temperatures (127 / -62 = nothing connected) are hidden on an unknown board
         self.assertNotIn("nct6798/temp3", hw.sensors)
         self.assertNotIn("nct6798/temp4", hw.sensors)
-        self.assertEqual(hw.sensors["nct6798/temp2"].label, "nct6798 CPUTIN")
+        self.assertEqual(hw.sensors["nct6798/temp2"].label, "CPU socket (CPUTIN)")
         self.assertIn("asusec/temp2", hw.sensors)
         self.assertIn("asusec/fan1", hw.fan_inputs, "EC fans are read-only readings")
         self.assertNotIn("asusec/fan1", hw.fans)
@@ -119,7 +119,9 @@ class AsusNuvoton(Machine):
         self.ticks(d, 2)
         groups = {g["id"]: g["title"] for g in d.status()["groups"]}
         self.assertEqual(groups["board"], "ASUSTeK COMPUTER INC. TUF GAMING X570-PLUS (Nuvoton NCT6798)")
-        self.assertFalse(any(r["id"].startswith("v:") for r in d.readings), "no unscaled voltages")
+        # unknown board: only the chip's fixed-function pins (driver-scaled), never the board-wired VIN inputs
+        self.assertEqual(sorted(r["id"] for r in d.readings if r["id"].startswith("v:")),
+                         sorted(f"v:nct6798/in{n}" for n in (0, 2, 3, 7, 8)), "no unscaled voltages")
         self.assertIn("fan:asusec/fan1", {r["id"] for r in d.readings})
         d.handle({"cmd": "selftest"}, 0)
         for _ in range(200):
@@ -528,6 +530,34 @@ class AsusTufX570Plus(unittest.TestCase):
         finally:
             m.cleanup()
 
+    def test_sensor_names_and_fixed_voltages(self):
+        """Nuvoton inputs get plain names (chip facts, any board) and the fixed-function voltage pins show up
+        on a board the database doesn't know; values from this real report, no false alarm."""
+        from fanpilot.readings import Readings
+        m = machine_from_report(json.load(open(os.path.join(REPORTS, "asus-tuf-gaming-x570-plus.json"))))
+        try:
+            hw = discover(m.root)
+            lab = {sid: s.label for sid, s in hw.sensors.items() if sid.startswith("nct")}
+            self.assertEqual(lab["nct6798/temp1"], "Motherboard (SYSTIN)")
+            self.assertEqual(lab["nct6798/temp2"], "CPU socket (CPUTIN)")
+            self.assertEqual(lab["nct6798/temp3"], "Auxiliary 0 (AUXTIN0)")
+            self.assertEqual(lab["nct6798/temp8"], "PECI agent 0 (calibration)")
+            self.assertEqual(lab["nct6798/temp9"], "SMBus master 1 (SMBUSMASTER 1)")
+            self.assertEqual(lab["nct6798/temp13"], "CPU (AMD TSI 0)")
+            self.assertEqual(lab["nct6798/temp14"], "AMD TSI 1 (TSI1_TEMP)")
+            self.assertFalse(any(v.startswith("nct6798 ") for v in lab.values()), "no chip-name prefix")
+            r = Readings(m.root, hw)
+            temps = {sid: s.read() for sid, s in hw.sensors.items()}
+            volts = {x["label"]: (x["value"], x["alert"]) for x in r.read(temps, {}, {}) if x["kind"] == "volt"
+                     and x["group"] == "board"}
+            self.assertEqual(sorted(volts), sorted(["CPU Vcore", "AVSB (+3.3V)", "+3.3V (3VCC)",
+                                                    "+3.3V standby (3VSB)", "CMOS battery (VBAT)"]))
+            for label, (v, alert) in volts.items():
+                self.assertFalse(alert, f"{label} = {v} V: no false alarm on a healthy board")
+            self.assertAlmostEqual(volts["+3.3V (3VCC)"][0], 3.3, delta=0.2)
+        finally:
+            m.cleanup()
+
     def test_no_guess_on_it87(self):
         """it87's pwmN_auto_channels_temp bitmask differs between driver builds: nothing is guessed."""
         m = machine_from_report(json.load(open(os.path.join(REPORTS, "gigabyte-b550m-aorus-elite.json"))))
@@ -536,6 +566,112 @@ class AsusTufX570Plus(unittest.TestCase):
             self.assertTrue(all(getattr(f, "bios", None) is None for f in hw.fans.values()))
         finally:
             m.cleanup()
+
+
+class Lightweight(Machine):
+    """The service must stay light (2026-11-15: measured on a real machine, every NVMe temperature read is a
+    command to the drive, 0.6-7 ms each, 5 of them a second)."""
+    def setUp(self):
+        self.load(boards.asus_amd())
+        self.d = self.daemon()
+        self.ticks(self.d, 2)
+
+    def test_drive_temperatures_every_10_s(self):
+        d = self.d
+        nv = next(sid for sid in d.hw.sensors if sid.startswith("nvme"))
+        path = d.hw.sensors[nv].path
+        os.chmod(path, 0o644)
+        first = d.temps[nv]
+        with open(path, "w") as f:
+            f.write("61000\n")
+        cpu = d.hw.default_cpu_sensor()
+        os.chmod(os.path.join(self.m.k10, "temp1_input"), 0o644)       # report files are read-only
+        self.m.set_temp(self.m.k10, 1, 66)
+        self.ticks(d, 3)
+        self.assertEqual(d.temps[nv], first, "the drive is not asked again within 10 s")
+        self.assertEqual(d.temps[cpu], 66, "CPU (and every register-read sensor) still every tick")
+        d._slow_next = 0                                 # 10 s later
+        self.ticks(d)
+        self.assertEqual(d.temps[nv], 61)
+
+    def test_sensors_view_built_only_when_asked(self):
+        d = self.d
+        calls = []
+        real = d.readings_src.read
+        d.readings_src.read = lambda *a: (calls.append(1), real(*a))[1]
+        self.ticks(d, 5)
+        self.assertEqual(calls, [], "nobody asked: no work")
+        st = d.handle({"cmd": "status"}, 0)["status"]
+        self.assertTrue(st["readings"])
+        d.handle({"cmd": "status"}, 0)
+        self.assertEqual(len(calls), 1, "at most once per tick, however many ask")
+        self.ticks(d)
+        light = d.handle({"cmd": "status", "readings": False}, 0)["status"]
+        self.assertEqual((light["readings"], light["groups"]), ([], []))
+        self.assertEqual(len(calls), 1, "the light status builds nothing")
+        self.assertTrue(light["fans"] and light["sensors"], "fans and temperatures are still there")
+
+
+class LightweightReads(Machine):
+    """Kernel-side costs measured on a real NCT6798 + RX 9070 XT (2026-11-15): a pwm read 0.35 ms; an amdgpu
+    reading ~1 ms when its firmware data is older than ~1 ms, ~0.03 ms right after another."""
+    def test_bios_fans_duty_register_not_read(self):
+        self.load(boards.asus_amd())
+        d = self.daemon()
+        self.ticks(d, 2)
+        reads = []
+        for f in d.hw.fans.values():
+            if f.kind == "board":
+                real = f.pwm
+                f.pwm = (lambda fid=f.id, real=real: (reads.append(fid), real())[1])
+        self.ticks(d, 3)
+        self.assertEqual(reads, [], "every header is on BIOS control: its duty register means nothing")
+        self.assertTrue(all(d.fan_status[f]["duty"] is None for f in d.hw.fans if f.startswith("nct")))
+
+    def test_graphics_card_read_in_one_burst(self):
+        self.load(json.load(open(os.path.join(REPORTS, "asus-tuf-gaming-x570-plus.json"))))
+        d = self.daemon()
+        self.ticks(d, 2)
+        order = []
+        gpu = d.hw.fans["amdgpu/fan1"]
+        for sid, sen in d.hw.sensors.items():
+            real = sen.read
+            sen.read = (lambda sid=sid, real=real: (order.append(sid), real())[1])
+        for name in ("rpm", "pwm"):
+            real = getattr(gpu, name)
+            setattr(gpu, name, (lambda name=name, real=real: (order.append("gpu:" + name), real())[1]))
+        self.ticks(d)
+        tail = [x for x in order if x.startswith(("amdgpu", "gpu:"))]
+        self.assertEqual(order[-len(tail):], tail, "graphics card readings are the last ones, together")
+        self.assertEqual(tail[-2:], ["gpu:rpm", "gpu:pwm"])
+        self.assertEqual(order.count("gpu:rpm"), 1, "fan speed read once per tick, with the temperatures")
+        self.assertEqual(d.fan_status["amdgpu/fan1"]["rpm"], gpu.rpm())
+
+
+class MoreDrivers(Machine):
+    def test_ram_and_drive_sensors(self):
+        """RAM module sensors (jc42 / spd5118) go to the Memory group; drivetemp gets a plain name; a dead VBAT
+        on an unknown Nuvoton board alerts, the board-specific VIN pins stay hidden."""
+        from fanpilot.readings import Readings
+        rep = boards.asus_amd()
+        rep["hwmon"].append(boards.chip("hwmon7", "jc42", "0-0018", "jc42", {"temp1_input": 41250}))
+        rep["hwmon"].append(boards.chip("hwmon8", "spd5118", "1-0051", "spd5118", {"temp1_input": 43000}))
+        rep["hwmon"].append(boards.chip("hwmon9", "drivetemp", "0:0:0:0", "drivetemp", {"temp1_input": 33000}))
+        for h in rep["hwmon"]:
+            if h["attrs"]["name"]["v"].strip() == "nct6798":
+                h["attrs"]["in8_input"] = {"v": "2200\n", "w": False}         # flat CMOS battery
+                h["attrs"]["in3_input"] = {"v": "3310\n", "w": False}
+        self.load(rep)
+        hw = discover(self.m.root)
+        r = Readings(self.m.root, hw)
+        out = r.read({sid: s.read() for sid, s in hw.sensors.items()}, {}, {})
+        mem = [x["label"] for x in out if x["group"] == "memory" and x["kind"] == "temp"]
+        self.assertEqual(mem, ["RAM module 1", "RAM module 1"])
+        self.assertIn("Drive 1", [x["label"] for x in out if x["kind"] == "temp"])
+        volts = {x["label"]: x["alert"] for x in out if x["kind"] == "volt"}
+        self.assertTrue(volts["CMOS battery (VBAT)"], "2.2 V battery: alert")
+        self.assertFalse(volts["+3.3V (3VCC)"])
+        self.assertFalse(any("VIN" in k for k in volts), "board-specific inputs stay hidden")
 
 
 class RealReports(unittest.TestCase):

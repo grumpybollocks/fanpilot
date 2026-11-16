@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+* **Sensors, any board with a Nuvoton chip (most ASUS, MSI, ASRock):** plain names for the chip's inputs, raw
+  name kept in brackets (`TSI0_TEMP` → *CPU (AMD TSI 0)*, `SYSTIN` → *Motherboard (SYSTIN)*, `CPUTIN` → *CPU
+  socket*, `AUXTINn`, `SMBUSMASTER n`, `PCH_*`), no more chip-name prefix.
+* **Voltages on boards not in the database:** the fixed-function pins of NCT6779 and later (CPU Vcore, AVSB,
+  +3.3V, +3.3V standby, CMOS battery), which the driver scales itself, with the +-10 % / low-battery alert.
+  Board-wired inputs (+12V, +5V, ...) still need the board database: raw values would mislead.
+* **Graphics card: measure its lowest speed (new, RX 7000/9000):** *Measure this fan…* on the card holds a
+  flat firmware curve at 100, 90, … down to the card's minimum (about 10 s each) and shows the slowest it
+  really runs (% and RPM), and below which setting the fan stops getting slower. Stops at 85 °C hotspot, on a
+  hot CPU or an emergency; the card's own setting comes back afterwards. Also `fanpilotctl calibrate amdgpu/fan1`.
+* **Lighter:** drive temperatures (NVMe, SATA `drivetemp`) are read every 10 s instead of every second (each
+  read is a command to the drive: 0.6-7 ms per NVMe read was measured, 5 a second on a 3-SSD PC); the
+  Sensors view list is built only when the app or `fanpilotctl sensors` asks for it; the app hidden in the
+  tray polls every 3 s (every second again when opened or while a CSV log runs); other `fanpilotctl`
+  commands ask for a status without the sensor list.
+* **Fewer expensive hardware reads:** a header's duty register is read only when FanPilot (not the BIOS) drives
+  it (0.35 ms of kernel time per read on an NCT6798); the graphics card's temperatures, fan speed and duty
+  are read together at the end of the tick, so amdgpu fetches them from the card's firmware once per
+  second instead of twice (each fetch ~1 ms of kernel time on an RX 9070 XT).
+* **More drivers:** RAM module temperatures (`jc42`, `spd5118`) in the Memory group; `drivetemp` drives and
+  Intel chipset (`pch_*`) sensors get plain names.
+
 ## 1.0.1
 
 * **Emergency mode covers the graphics card too:** above a CPU or GPU emergency limit, an AMD RX 7000/9000
